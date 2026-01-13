@@ -42,6 +42,10 @@ release
 # OS
 Thumbs.db
 
+# Electron dev cache
+.electron/
+.cache/
+
 
 
 # 忽略 Visual Studio 临时文件夹

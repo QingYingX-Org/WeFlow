@@ -506,6 +506,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
 
               {dbKeyStatus && <div className="field-hint status-text">{dbKeyStatus}</div>}
               <div className="field-hint">获取密钥会自动识别最近登录的账号</div>
+              <div className="field-hint">如果获取秘钥失败 请在微信打开后等待10秒后再登录</div>
             </div>
           )}
 
