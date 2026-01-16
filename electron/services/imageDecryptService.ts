@@ -936,6 +936,18 @@ export class ImageDecryptService {
     extensions: string[],
     preferHd: boolean
   ): string | null {
+    // 先检查并删除旧的 .hevc 文件（ffmpeg 转换失败时遗留的）
+    const hevcThumb = join(dirPath, `${normalizedKey}_thumb.hevc`)
+    const hevcHd = join(dirPath, `${normalizedKey}_hd.hevc`)
+    try {
+      if (existsSync(hevcThumb)) {
+        require('fs').unlinkSync(hevcThumb)
+      }
+      if (existsSync(hevcHd)) {
+        require('fs').unlinkSync(hevcHd)
+      }
+    } catch { }
+
     for (const ext of extensions) {
       if (preferHd) {
         const hdPath = join(dirPath, `${normalizedKey}_hd${ext}`)
