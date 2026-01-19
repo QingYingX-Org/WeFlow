@@ -11,12 +11,13 @@ import {
 } from 'lucide-react'
 import './SettingsPage.scss'
 
-type SettingsTab = 'appearance' | 'database' | 'whisper' | 'cache' | 'about'
+type SettingsTab = 'appearance' | 'database' | 'whisper' | 'export' | 'cache' | 'about'
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'database', label: '数据库连接', icon: Database },
   { id: 'whisper', label: '语音识别模型', icon: Mic },
+  { id: 'export', label: '导出', icon: Download },
   { id: 'cache', label: '缓存', icon: HardDrive },
   { id: 'about', label: '关于', icon: Info }
 ]
@@ -49,6 +50,11 @@ function SettingsPage() {
   const [whisperModelStatus, setWhisperModelStatus] = useState<{ exists: boolean; modelPath?: string; tokensPath?: string } | null>(null)
   const [autoTranscribeVoice, setAutoTranscribeVoice] = useState(false)
   const [transcribeLanguages, setTranscribeLanguages] = useState<string[]>(['zh'])
+  const [exportDefaultFormat, setExportDefaultFormat] = useState('excel')
+  const [exportDefaultDateRange, setExportDefaultDateRange] = useState('today')
+  const [exportDefaultMedia, setExportDefaultMedia] = useState(false)
+  const [exportDefaultVoiceAsText, setExportDefaultVoiceAsText] = useState(true)
+  const [exportDefaultExcelCompactColumns, setExportDefaultExcelCompactColumns] = useState(true)
 
   const [isLoading, setIsLoadingState] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
@@ -114,6 +120,11 @@ function SettingsPage() {
       const savedWhisperModelDir = await configService.getWhisperModelDir()
       const savedAutoTranscribe = await configService.getAutoTranscribeVoice()
       const savedTranscribeLanguages = await configService.getTranscribeLanguages()
+      const savedExportDefaultFormat = await configService.getExportDefaultFormat()
+      const savedExportDefaultDateRange = await configService.getExportDefaultDateRange()
+      const savedExportDefaultMedia = await configService.getExportDefaultMedia()
+      const savedExportDefaultVoiceAsText = await configService.getExportDefaultVoiceAsText()
+      const savedExportDefaultExcelCompactColumns = await configService.getExportDefaultExcelCompactColumns()
 
       if (savedKey) setDecryptKey(savedKey)
       if (savedPath) setDbPath(savedPath)
@@ -126,6 +137,11 @@ function SettingsPage() {
       setLogEnabled(savedLogEnabled)
       setAutoTranscribeVoice(savedAutoTranscribe)
       setTranscribeLanguages(savedTranscribeLanguages)
+      setExportDefaultFormat(savedExportDefaultFormat || 'excel')
+      setExportDefaultDateRange(savedExportDefaultDateRange || 'today')
+      setExportDefaultMedia(savedExportDefaultMedia ?? false)
+      setExportDefaultVoiceAsText(savedExportDefaultVoiceAsText ?? true)
+      setExportDefaultExcelCompactColumns(savedExportDefaultExcelCompactColumns ?? true)
 
       // 如果语言列表为空，保存默认值
       if (!savedTranscribeLanguages || savedTranscribeLanguages.length === 0) {
@@ -853,6 +869,115 @@ function SettingsPage() {
       </div>
     </div>
   )
+
+  const renderExportTab = () => (
+    <div className="tab-content">
+      <div className="form-group">
+        <label>默认导出格式</label>
+        <span className="form-hint">导出页面默认选中的格式</span>
+        <select
+          value={exportDefaultFormat}
+          onChange={async (e) => {
+            const value = e.target.value
+            setExportDefaultFormat(value)
+            await configService.setExportDefaultFormat(value)
+            showMessage('已更新导出格式默认值', true)
+          }}
+        >
+          <option value="excel">Excel</option>
+          <option value="chatlab">ChatLab</option>
+          <option value="chatlab-jsonl">ChatLab JSONL</option>
+          <option value="json">JSON</option>
+          <option value="html">HTML</option>
+          <option value="txt">TXT</option>
+          <option value="sql">PostgreSQL</option>
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label>默认导出时间范围</label>
+        <span className="form-hint">控制导出页面的默认时间选择</span>
+        <select
+          value={exportDefaultDateRange}
+          onChange={async (e) => {
+            const value = e.target.value
+            setExportDefaultDateRange(value)
+            await configService.setExportDefaultDateRange(value)
+            showMessage('已更新默认导出时间范围', true)
+          }}
+        >
+          <option value="today">今天</option>
+          <option value="7d">最近7天</option>
+          <option value="30d">最近30天</option>
+          <option value="90d">最近90天</option>
+          <option value="all">全部时间</option>
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label>默认导出媒体文件</label>
+        <span className="form-hint">控制图片/语音/表情的默认导出开关</span>
+        <div className="log-toggle-line">
+          <span className="log-status">{exportDefaultMedia ? '已开启' : '已关闭'}</span>
+          <label className="switch" htmlFor="export-default-media">
+            <input
+              id="export-default-media"
+              className="switch-input"
+              type="checkbox"
+              checked={exportDefaultMedia}
+              onChange={async (e) => {
+                const enabled = e.target.checked
+                setExportDefaultMedia(enabled)
+                await configService.setExportDefaultMedia(enabled)
+                showMessage(enabled ? '已开启默认媒体导出' : '已关闭默认媒体导出', true)
+              }}
+            />
+            <span className="switch-slider" />
+          </label>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>默认语音转文字</label>
+        <span className="form-hint">导出时默认将语音转写为文字</span>
+        <div className="log-toggle-line">
+          <span className="log-status">{exportDefaultVoiceAsText ? '已开启' : '已关闭'}</span>
+          <label className="switch" htmlFor="export-default-voice-as-text">
+            <input
+              id="export-default-voice-as-text"
+              className="switch-input"
+              type="checkbox"
+              checked={exportDefaultVoiceAsText}
+              onChange={async (e) => {
+                const enabled = e.target.checked
+                setExportDefaultVoiceAsText(enabled)
+                await configService.setExportDefaultVoiceAsText(enabled)
+                showMessage(enabled ? '已开启默认语音转文字' : '已关闭默认语音转文字', true)
+              }}
+            />
+            <span className="switch-slider" />
+          </label>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>Excel 列显示</label>
+        <span className="form-hint">控制 Excel 导出的列字段</span>
+        <select
+          value={exportDefaultExcelCompactColumns ? 'compact' : 'full'}
+          onChange={async (e) => {
+            const compact = e.target.value === 'compact'
+            setExportDefaultExcelCompactColumns(compact)
+            await configService.setExportDefaultExcelCompactColumns(compact)
+            showMessage(compact ? '已启用精简列' : '已启用完整列', true)
+          }}
+        >
+          <option value="compact">精简列（序号、时间、发送者身份、消息类型、内容）</option>
+          <option value="full">完整列（含发送者昵称/微信ID/备注）</option>
+        </select>
+      </div>
+    </div>
+  )
   const renderCacheTab = () => (
     <div className="tab-content">
       <p className="section-desc">管理应用缓存数据</p>
@@ -992,6 +1117,7 @@ function SettingsPage() {
         {activeTab === 'appearance' && renderAppearanceTab()}
         {activeTab === 'database' && renderDatabaseTab()}
         {activeTab === 'whisper' && renderWhisperTab()}
+        {activeTab === 'export' && renderExportTab()}
         {activeTab === 'cache' && renderCacheTab()}
         {activeTab === 'about' && renderAboutTab()}
       </div>
@@ -1000,5 +1126,4 @@ function SettingsPage() {
 }
 
 export default SettingsPage
-
 

@@ -71,6 +71,7 @@ export interface ExportOptions {
   exportVoices?: boolean
   exportEmojis?: boolean
   exportVoiceAsText?: boolean
+  excelCompactColumns?: boolean
 }
 
 interface MediaExportItem {
@@ -1384,8 +1385,9 @@ class ExportService {
 
       let currentRow = 1
 
+      const useCompactColumns = options.excelCompactColumns === true
+
       // 第一行：会话信息标题
-      worksheet.mergeCells(currentRow, 1, currentRow, 8)
       const titleCell = worksheet.getCell(currentRow, 1)
       titleCell.value = '会话信息'
       titleCell.font = { name: 'Calibri', bold: true, size: 11 }
@@ -1441,7 +1443,9 @@ class ExportService {
       currentRow++
 
       // 表头行
-      const headers = ['序号', '时间', '发送者昵称', '发送者微信ID', '发送者备注', '发送者身份', '消息类型', '内容']
+      const headers = useCompactColumns
+        ? ['序号', '时间', '发送者身份', '消息类型', '内容']
+        : ['序号', '时间', '发送者昵称', '发送者微信ID', '发送者备注', '发送者身份', '消息类型', '内容']
       const headerRow = worksheet.getRow(currentRow)
       headerRow.height = 22
 
@@ -1461,12 +1465,18 @@ class ExportService {
       // 设置列宽
       worksheet.getColumn(1).width = 8   // 序号
       worksheet.getColumn(2).width = 20  // 时间
-      worksheet.getColumn(3).width = 18  // 发送者昵称
-      worksheet.getColumn(4).width = 25  // 发送者微信ID
-      worksheet.getColumn(5).width = 18  // 发送者备注
-      worksheet.getColumn(6).width = 15  // 发送者身份
-      worksheet.getColumn(7).width = 12  // 消息类型
-      worksheet.getColumn(8).width = 50  // 内容
+      if (useCompactColumns) {
+        worksheet.getColumn(3).width = 18  // 发送者身份
+        worksheet.getColumn(4).width = 12  // 消息类型
+        worksheet.getColumn(5).width = 50  // 内容
+      } else {
+        worksheet.getColumn(3).width = 18  // 发送者昵称
+        worksheet.getColumn(4).width = 25  // 发送者微信ID
+        worksheet.getColumn(5).width = 18  // 发送者备注
+        worksheet.getColumn(6).width = 15  // 发送者身份
+        worksheet.getColumn(7).width = 12  // 消息类型
+        worksheet.getColumn(8).width = 50  // 内容
+      }
 
       // 填充数据
       const sortedMessages = collected.rows.sort((a, b) => a.createTime - b.createTime)
@@ -1559,15 +1569,22 @@ class ExportService {
 
         worksheet.getCell(currentRow, 1).value = i + 1
         worksheet.getCell(currentRow, 2).value = this.formatTimestamp(msg.createTime)
-        worksheet.getCell(currentRow, 3).value = senderNickname
-        worksheet.getCell(currentRow, 4).value = senderWxid
-        worksheet.getCell(currentRow, 5).value = senderRemark
-        worksheet.getCell(currentRow, 6).value = senderRole
-        worksheet.getCell(currentRow, 7).value = this.getMessageTypeName(msg.localType)
-        worksheet.getCell(currentRow, 8).value = contentValue
+        if (useCompactColumns) {
+          worksheet.getCell(currentRow, 3).value = senderRole
+          worksheet.getCell(currentRow, 4).value = this.getMessageTypeName(msg.localType)
+          worksheet.getCell(currentRow, 5).value = contentValue
+        } else {
+          worksheet.getCell(currentRow, 3).value = senderNickname
+          worksheet.getCell(currentRow, 4).value = senderWxid
+          worksheet.getCell(currentRow, 5).value = senderRemark
+          worksheet.getCell(currentRow, 6).value = senderRole
+          worksheet.getCell(currentRow, 7).value = this.getMessageTypeName(msg.localType)
+          worksheet.getCell(currentRow, 8).value = contentValue
+        }
 
         // 设置每个单元格的样式
-        for (let col = 1; col <= 8; col++) {
+        const maxColumns = useCompactColumns ? 5 : 8
+        for (let col = 1; col <= maxColumns; col++) {
           const cell = worksheet.getCell(currentRow, col)
           cell.font = { name: 'Calibri', size: 11 }
           cell.alignment = { vertical: 'middle', wrapText: false }

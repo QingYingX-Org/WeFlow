@@ -22,7 +22,12 @@ export const CONFIG_KEYS = {
   WHISPER_MODEL_DIR: 'whisperModelDir',
   WHISPER_DOWNLOAD_SOURCE: 'whisperDownloadSource',
   AUTO_TRANSCRIBE_VOICE: 'autoTranscribeVoice',
-  TRANSCRIBE_LANGUAGES: 'transcribeLanguages'
+  TRANSCRIBE_LANGUAGES: 'transcribeLanguages',
+  EXPORT_DEFAULT_FORMAT: 'exportDefaultFormat',
+  EXPORT_DEFAULT_DATE_RANGE: 'exportDefaultDateRange',
+  EXPORT_DEFAULT_MEDIA: 'exportDefaultMedia',
+  EXPORT_DEFAULT_VOICE_AS_TEXT: 'exportDefaultVoiceAsText',
+  EXPORT_DEFAULT_EXCEL_COMPACT_COLUMNS: 'exportDefaultExcelCompactColumns'
 } as const
 
 // 获取解密密钥
@@ -242,4 +247,62 @@ export async function getTranscribeLanguages(): Promise<string[]> {
 // 设置语音转文字支持的语言列表
 export async function setTranscribeLanguages(languages: string[]): Promise<void> {
   await config.set(CONFIG_KEYS.TRANSCRIBE_LANGUAGES, languages)
+}
+
+// 获取导出默认格式
+export async function getExportDefaultFormat(): Promise<string | null> {
+  const value = await config.get(CONFIG_KEYS.EXPORT_DEFAULT_FORMAT)
+  return (value as string) || null
+}
+
+// 设置导出默认格式
+export async function setExportDefaultFormat(format: string): Promise<void> {
+  await config.set(CONFIG_KEYS.EXPORT_DEFAULT_FORMAT, format)
+}
+
+// 获取导出默认时间范围
+export async function getExportDefaultDateRange(): Promise<string | null> {
+  const value = await config.get(CONFIG_KEYS.EXPORT_DEFAULT_DATE_RANGE)
+  return (value as string) || null
+}
+
+// 设置导出默认时间范围
+export async function setExportDefaultDateRange(range: string): Promise<void> {
+  await config.set(CONFIG_KEYS.EXPORT_DEFAULT_DATE_RANGE, range)
+}
+
+// 获取导出默认媒体设置
+export async function getExportDefaultMedia(): Promise<boolean | null> {
+  const value = await config.get(CONFIG_KEYS.EXPORT_DEFAULT_MEDIA)
+  if (typeof value === 'boolean') return value
+  return null
+}
+
+// 设置导出默认媒体设置
+export async function setExportDefaultMedia(enabled: boolean): Promise<void> {
+  await config.set(CONFIG_KEYS.EXPORT_DEFAULT_MEDIA, enabled)
+}
+
+// 获取导出默认语音转文字
+export async function getExportDefaultVoiceAsText(): Promise<boolean | null> {
+  const value = await config.get(CONFIG_KEYS.EXPORT_DEFAULT_VOICE_AS_TEXT)
+  if (typeof value === 'boolean') return value
+  return null
+}
+
+// 设置导出默认语音转文字
+export async function setExportDefaultVoiceAsText(enabled: boolean): Promise<void> {
+  await config.set(CONFIG_KEYS.EXPORT_DEFAULT_VOICE_AS_TEXT, enabled)
+}
+
+// 获取导出默认 Excel 列模式
+export async function getExportDefaultExcelCompactColumns(): Promise<boolean | null> {
+  const value = await config.get(CONFIG_KEYS.EXPORT_DEFAULT_EXCEL_COMPACT_COLUMNS)
+  if (typeof value === 'boolean') return value
+  return null
+}
+
+// 设置导出默认 Excel 列模式
+export async function setExportDefaultExcelCompactColumns(enabled: boolean): Promise<void> {
+  await config.set(CONFIG_KEYS.EXPORT_DEFAULT_EXCEL_COMPACT_COLUMNS, enabled)
 }

@@ -327,6 +327,11 @@ export interface ExportOptions {
   dateRange?: { start: number; end: number } | null
   exportMedia?: boolean
   exportAvatars?: boolean
+  exportImages?: boolean
+  exportVoices?: boolean
+  exportEmojis?: boolean
+  exportVoiceAsText?: boolean
+  excelCompactColumns?: boolean
 }
 
 export interface WxidInfo {

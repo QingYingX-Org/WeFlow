@@ -21,6 +21,7 @@ interface ExportOptions {
   exportVoices: boolean
   exportEmojis: boolean
   exportVoiceAsText: boolean
+  excelCompactColumns: boolean
 }
 
 interface ExportResult {
@@ -45,19 +46,39 @@ function ExportPage() {
   const [selectingStart, setSelectingStart] = useState(true)
 
   const [options, setOptions] = useState<ExportOptions>({
-    format: 'chatlab',
+    format: 'excel',
     dateRange: {
-      start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      start: new Date(new Date().setHours(0, 0, 0, 0)),
       end: new Date()
     },
-    useAllTime: true,
+    useAllTime: false,
     exportAvatars: true,
     exportMedia: false,
     exportImages: true,
     exportVoices: true,
     exportEmojis: true,
-    exportVoiceAsText: false
+    exportVoiceAsText: true,
+    excelCompactColumns: true
   })
+
+  const buildDateRangeFromPreset = (preset: string) => {
+    const now = new Date()
+    if (preset === 'all') {
+      return { useAllTime: true, dateRange: { start: now, end: now } }
+    }
+    let rangeMs = 0
+    if (preset === '7d') rangeMs = 7 * 24 * 60 * 60 * 1000
+    if (preset === '30d') rangeMs = 30 * 24 * 60 * 60 * 1000
+    if (preset === '90d') rangeMs = 90 * 24 * 60 * 60 * 1000
+    if (preset === 'today' || rangeMs === 0) {
+      const start = new Date(now)
+      start.setHours(0, 0, 0, 0)
+      return { useAllTime: false, dateRange: { start, end: now } }
+    }
+    const start = new Date(now.getTime() - rangeMs)
+    start.setHours(0, 0, 0, 0)
+    return { useAllTime: false, dateRange: { start, end: now } }
+  }
 
   const loadSessions = useCallback(async () => {
     setIsLoading(true)
@@ -94,10 +115,44 @@ function ExportPage() {
     }
   }, [])
 
+  const loadExportDefaults = useCallback(async () => {
+    try {
+      const [
+        savedFormat,
+        savedRange,
+        savedMedia,
+        savedVoiceAsText,
+        savedExcelCompactColumns
+      ] = await Promise.all([
+        configService.getExportDefaultFormat(),
+        configService.getExportDefaultDateRange(),
+        configService.getExportDefaultMedia(),
+        configService.getExportDefaultVoiceAsText(),
+        configService.getExportDefaultExcelCompactColumns()
+      ])
+
+      const preset = savedRange || 'today'
+      const rangeDefaults = buildDateRangeFromPreset(preset)
+
+      setOptions((prev) => ({
+        ...prev,
+        format: (savedFormat as ExportOptions['format']) || 'excel',
+        useAllTime: rangeDefaults.useAllTime,
+        dateRange: rangeDefaults.dateRange,
+        exportMedia: savedMedia ?? false,
+        exportVoiceAsText: savedVoiceAsText ?? true,
+        excelCompactColumns: savedExcelCompactColumns ?? true
+      }))
+    } catch (e) {
+      console.error('加载导出默认设置失败:', e)
+    }
+  }, [])
+
   useEffect(() => {
     loadSessions()
     loadExportPath()
-  }, [loadSessions, loadExportPath])
+    loadExportDefaults()
+  }, [loadSessions, loadExportPath, loadExportDefaults])
 
   useEffect(() => {
     if (!searchKeyword.trim()) {
@@ -161,6 +216,7 @@ function ExportPage() {
         exportVoices: options.exportMedia && options.exportVoices,
         exportEmojis: options.exportMedia && options.exportEmojis,
         exportVoiceAsText: options.exportVoiceAsText,  // 独立于 exportMedia
+        excelCompactColumns: options.excelCompactColumns,
         dateRange: options.useAllTime ? null : options.dateRange ? {
           start: Math.floor(options.dateRange.start.getTime() / 1000),
           // 将结束日期设置为当天的 23:59:59,以包含当天的所有消息
