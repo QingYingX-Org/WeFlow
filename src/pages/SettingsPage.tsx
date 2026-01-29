@@ -7,7 +7,7 @@ import { dialog } from '../services/ipc'
 import * as configService from '../services/config'
 import {
   Eye, EyeOff, FolderSearch, FolderOpen, Search, Copy,
-  RotateCcw, Trash2, Save, Plug, Check, Sun, Moon,
+  RotateCcw, Trash2, Plug, Check, Sun, Moon,
   Palette, Database, Download, HardDrive, Info, RefreshCw, ChevronDown, Mic,
   ShieldCheck, Fingerprint, Lock, KeyRound
 } from 'lucide-react'
@@ -575,6 +575,19 @@ function SettingsPage() {
     handleAutoGetDbKey()
   }
 
+  // Helper to sync current keys to wxid config
+  const syncCurrentKeys = async () => {
+    const keys = buildKeysFromState()
+    await syncKeysToConfig(keys)
+    if (wxid) {
+      await configService.setWxidConfig(wxid, {
+        decryptKey: keys.decryptKey,
+        imageXorKey: typeof keys.imageXorKey === 'number' ? keys.imageXorKey : 0,
+        imageAesKey: keys.imageAesKey
+      })
+    }
+  }
+
   const handleAutoGetImageKey = async () => {
     if (isFetchingImageKey) return
     if (!dbPath) {
@@ -593,6 +606,23 @@ function SettingsPage() {
         setImageAesKey(result.aesKey)
         setImageKeyStatus('已获取图片密钥')
         showMessage('已自动获取图片密钥', true)
+
+        // Auto-save after fetching keys
+        // We need to use the values directly because state updates are async
+        const newXorKey = typeof result.xorKey === 'number' ? result.xorKey : 0
+        const newAesKey = result.aesKey
+
+        await configService.setImageXorKey(newXorKey)
+        await configService.setImageAesKey(newAesKey)
+
+        if (wxid) {
+          await configService.setWxidConfig(wxid, {
+            decryptKey: decryptKey, // use current state as it hasn't changed here
+            imageXorKey: newXorKey,
+            imageAesKey: newAesKey
+          })
+        }
+
       } else {
         showMessage(result.error || '自动获取图片密钥失败', false)
       }
@@ -626,48 +656,8 @@ function SettingsPage() {
     }
   }
 
-  const handleSaveConfig = async () => {
-    if (!decryptKey) { showMessage('请输入解密密钥', false); return }
-    if (decryptKey.length !== 64) { showMessage('密钥长度必须为64个字符', false); return }
-    if (!dbPath) { showMessage('请选择数据库目录', false); return }
-    if (!wxid) { showMessage('请输入 wxid', false); return }
+  // Removed manual save config function
 
-    setIsLoadingState(true)
-    setLoading(true, '正在保存配置...')
-
-    try {
-      await configService.setDecryptKey(decryptKey)
-      await configService.setDbPath(dbPath)
-      await configService.setMyWxid(wxid)
-      await configService.setCachePath(cachePath)
-      const parsedXorKey = parseImageXorKey(imageXorKey)
-      await configService.setImageXorKey(typeof parsedXorKey === 'number' ? parsedXorKey : 0)
-      await configService.setImageAesKey(imageAesKey || '')
-      await configService.setWxidConfig(wxid, {
-        decryptKey,
-        imageXorKey: typeof parsedXorKey === 'number' ? parsedXorKey : 0,
-        imageAesKey
-      })
-      await configService.setWhisperModelDir(whisperModelDir)
-      await configService.setAutoTranscribeVoice(autoTranscribeVoice)
-      await configService.setTranscribeLanguages(transcribeLanguages)
-      await configService.setOnboardingDone(true)
-
-      // 保存按钮只负责持久化配置，不做连接测试/重连，避免影响聊天页的活动连接
-
-      // 保存安全配置
-      // 注意：这里只处理开关，密码修改是实时生效的（在 renderSecurityTab 里处理）
-      await configService.setAuthEnabled(authEnabled)
-      await configService.setAuthUseHello(authUseHello)
-
-      showMessage('配置保存成功', true)
-    } catch (e: any) {
-      showMessage(`保存配置失败: ${e}`, false)
-    } finally {
-      setIsLoadingState(false)
-      setLoading(false)
-    }
-  }
 
   const handleClearConfig = async () => {
     const confirmed = window.confirm('确定要清除当前配置吗？清除后需要重新完成首次配置？')
@@ -810,7 +800,18 @@ function SettingsPage() {
         <label>解密密钥</label>
         <span className="form-hint">64位十六进制密钥</span>
         <div className="input-with-toggle">
-          <input type={showDecryptKey ? 'text' : 'password'} placeholder="例如: a1b2c3d4e5f6..." value={decryptKey} onChange={(e) => setDecryptKey(e.target.value)} />
+          <input
+            type={showDecryptKey ? 'text' : 'password'}
+            placeholder="例如: a1b2c3d4e5f6..."
+            value={decryptKey}
+            onChange={(e) => setDecryptKey(e.target.value)}
+            onBlur={async () => {
+              if (decryptKey && decryptKey.length === 64) {
+                await syncCurrentKeys()
+                // showMessage('解密密钥已保存', true) 
+              }
+            }}
+          />
           <button type="button" className="toggle-visibility" onClick={() => setShowDecryptKey(!showDecryptKey)}>
             {showDecryptKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
@@ -834,7 +835,17 @@ function SettingsPage() {
         <label>数据库根目录</label>
         <span className="form-hint">xwechat_files 目录</span>
         <span className="form-hint" style={{ color: '#ff6b6b' }}> 目录路径不可包含中文，如有中文请去微信-设置-存储位置点击更改，迁移至全英文目录</span>
-        <input type="text" placeholder="例如: C:\Users\xxx\Documents\xwechat_files" value={dbPath} onChange={(e) => setDbPath(e.target.value)} />
+        <input
+          type="text"
+          placeholder="例如: C:\Users\xxx\Documents\xwechat_files"
+          value={dbPath}
+          onChange={(e) => setDbPath(e.target.value)}
+          onBlur={async () => {
+            if (dbPath) {
+              await configService.setDbPath(dbPath)
+            }
+          }}
+        />
         <div className="btn-row">
           <button className="btn btn-primary" onClick={handleAutoDetectPath} disabled={isDetectingPath}>
             <FolderSearch size={16} /> {isDetectingPath ? '检测中...' : '自动检测'}
@@ -852,6 +863,12 @@ function SettingsPage() {
             placeholder="例如: wxid_xxxxxx"
             value={wxid}
             onChange={(e) => setWxid(e.target.value)}
+            onBlur={async () => {
+              if (wxid) {
+                await configService.setMyWxid(wxid)
+                await syncCurrentKeys() // Sync keys to the new wxid entry
+              }
+            }}
           />
         </div>
         <button className="btn btn-secondary btn-sm" onClick={() => handleScanWxid()}><Search size={14} /> 扫描 wxid</button>
@@ -860,13 +877,25 @@ function SettingsPage() {
       <div className="form-group">
         <label>图片 XOR 密钥 <span className="optional">(可选)</span></label>
         <span className="form-hint">用于解密图片缓存</span>
-        <input type="text" placeholder="例如: 0xA4" value={imageXorKey} onChange={(e) => setImageXorKey(e.target.value)} />
+        <input
+          type="text"
+          placeholder="例如: 0xA4"
+          value={imageXorKey}
+          onChange={(e) => setImageXorKey(e.target.value)}
+          onBlur={syncCurrentKeys}
+        />
       </div>
 
       <div className="form-group">
         <label>图片 AES 密钥 <span className="optional">(可选)</span></label>
         <span className="form-hint">16 位密钥</span>
-        <input type="text" placeholder="16 位 AES 密钥" value={imageAesKey} onChange={(e) => setImageAesKey(e.target.value)} />
+        <input
+          type="text"
+          placeholder="16 位 AES 密钥"
+          value={imageAesKey}
+          onChange={(e) => setImageAesKey(e.target.value)}
+          onBlur={syncCurrentKeys}
+        />
         <button className="btn btn-secondary btn-sm" onClick={handleAutoGetImageKey} disabled={isFetchingImageKey}>
           <Plug size={14} /> {isFetchingImageKey ? '获取中...' : '自动获取图片密钥'}
         </button>
@@ -1219,7 +1248,15 @@ function SettingsPage() {
       <div className="form-group">
         <label>缓存目录 <span className="optional">(可选)</span></label>
         <span className="form-hint">留空使用默认目录</span>
-        <input type="text" placeholder="留空使用默认目录" value={cachePath} onChange={(e) => setCachePath(e.target.value)} />
+        <input
+          type="text"
+          placeholder="留空使用默认目录"
+          value={cachePath}
+          onChange={(e) => setCachePath(e.target.value)}
+          onBlur={async () => {
+            await configService.setCachePath(cachePath)
+          }}
+        />
         <div className="btn-row">
           <button className="btn btn-secondary" onClick={handleSelectCachePath}><FolderOpen size={16} /> 浏览选择</button>
           <button className="btn btn-secondary" onClick={() => setCachePath('')}><RotateCcw size={16} /> 恢复默认</button>
@@ -1255,7 +1292,7 @@ function SettingsPage() {
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: 'WeFlow', id: window.location.hostname },
+          rp: { name: 'WeFlow', id: 'localhost' },
           user: { id: new Uint8Array([1]), name: 'user', displayName: 'User' },
           pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
           authenticatorSelection: { userVerification: 'required' },
@@ -1307,7 +1344,15 @@ function SettingsPage() {
             <span className="form-hint">每次启动应用时需要验证密码</span>
           </div>
           <label className="switch">
-            <input type="checkbox" checked={authEnabled} onChange={(e) => setAuthEnabled(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={authEnabled}
+              onChange={async (e) => {
+                const enabled = e.target.checked
+                setAuthEnabled(enabled)
+                await configService.setAuthEnabled(enabled)
+              }}
+            />
             <span className="switch-slider" />
           </label>
         </div>
@@ -1458,9 +1503,6 @@ function SettingsPage() {
         <div className="settings-actions">
           <button className="btn btn-secondary" onClick={handleTestConnection} disabled={isLoading || isTesting}>
             <Plug size={16} /> {isTesting ? '测试中...' : '测试连接'}
-          </button>
-          <button className="btn btn-primary" onClick={handleSaveConfig} disabled={isLoading}>
-            <Save size={16} /> {isLoading ? '保存中...' : '保存配置'}
           </button>
         </div>
       </div>

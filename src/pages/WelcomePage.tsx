@@ -80,7 +80,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: 'WeFlow', id: window.location.hostname },
+          rp: { name: 'WeFlow', id: 'localhost' },
           user: {
             id: new Uint8Array([1]),
             name: 'user',

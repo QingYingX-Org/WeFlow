@@ -53,7 +53,8 @@ function App() {
 
   // 锁定状态
   const [isLocked, setIsLocked] = useState(false)
-  const [lockAvatar, setLockAvatar] = useState('')
+  const [lockAvatar, setLockAvatar] = useState<string | undefined>(undefined)
+  const [lockUseHello, setLockUseHello] = useState(false)
 
   // 协议同意状态
   const [showAgreement, setShowAgreement] = useState(false)
@@ -260,8 +261,14 @@ function App() {
     if (isAgreementWindow || isOnboardingWindow || isVideoPlayerWindow) return
 
     const checkLock = async () => {
-      const enabled = await configService.getAuthEnabled()
+      // 并行获取配置，减少等待
+      const [enabled, useHello] = await Promise.all([
+        configService.getAuthEnabled(),
+        configService.getAuthUseHello()
+      ])
+
       if (enabled) {
+        setLockUseHello(useHello)
         setIsLocked(true)
         // 尝试获取头像
         try {
@@ -298,6 +305,7 @@ function App() {
         <LockScreen
           onUnlock={() => setIsLocked(false)}
           avatar={lockAvatar}
+          useHello={lockUseHello}
         />
       )}
       <TitleBar />
