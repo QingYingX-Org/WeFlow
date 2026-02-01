@@ -1477,6 +1477,87 @@ class ExportService {
     return result
   }
 
+  /**
+   * 导出头像为外部文件（仅用于HTML格式）
+   * 将头像保存到 avatars/ 子目录，返回相对路径
+   */
+  private async exportAvatarsToFiles(
+    members: Array<{ username: string; avatarUrl?: string }>,
+    outputDir: string
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>()
+    if (members.length === 0) return result
+
+    // 创建 avatars 子目录
+    const avatarsDir = path.join(outputDir, 'avatars')
+    if (!fs.existsSync(avatarsDir)) {
+      fs.mkdirSync(avatarsDir, { recursive: true })
+    }
+
+    for (const member of members) {
+      const fileInfo = this.resolveAvatarFile(member.avatarUrl)
+      if (!fileInfo) continue
+      try {
+        let data: Buffer | null = null
+        let mime = fileInfo.mime
+        if (fileInfo.data) {
+          data = fileInfo.data
+        } else if (fileInfo.sourcePath && fs.existsSync(fileInfo.sourcePath)) {
+          data = await fs.promises.readFile(fileInfo.sourcePath)
+        } else if (fileInfo.sourceUrl) {
+          const downloaded = await this.downloadToBuffer(fileInfo.sourceUrl)
+          if (downloaded) {
+            data = downloaded.data
+            mime = downloaded.mime || mime
+          }
+        }
+        if (!data) continue
+
+        // 优先使用内容检测出的 MIME 类型
+        const detectedMime = this.detectMimeType(data)
+        const finalMime = detectedMime || mime || this.inferImageMime(fileInfo.ext)
+
+        // 根据 MIME 类型确定文件扩展名
+        const ext = this.getExtensionFromMime(finalMime)
+
+        // 清理用户名作为文件名（移除非法字符，限制长度）
+        const sanitizedUsername = member.username
+          .replace(/[<>:"/\\|?*@]/g, '_')
+          .substring(0, 100)
+
+        const filename = `${sanitizedUsername}${ext}`
+        const avatarPath = path.join(avatarsDir, filename)
+
+        // 保存头像文件
+        await fs.promises.writeFile(avatarPath, data)
+
+        // 返回相对路径
+        result.set(member.username, `avatars/${filename}`)
+      } catch {
+        continue
+      }
+    }
+
+    return result
+  }
+
+  private getExtensionFromMime(mime: string): string {
+    switch (mime) {
+      case 'image/png':
+        return '.png'
+      case 'image/gif':
+        return '.gif'
+      case 'image/webp':
+        return '.webp'
+      case 'image/bmp':
+        return '.bmp'
+      case 'image/jpeg':
+      default:
+        return '.jpg'
+    }
+  }
+
+
   private detectMimeType(buffer: Buffer): string | null {
     if (buffer.length < 4) return null
 
@@ -2772,7 +2853,7 @@ class ExportService {
       }
 
       const avatarMap = options.exportAvatars
-        ? await this.exportAvatars(
+        ? await this.exportAvatarsToFiles(
           [
             ...Array.from(collected.memberSet.entries()).map(([username, info]) => ({
               username,
@@ -2780,7 +2861,8 @@ class ExportService {
             })),
             { username: sessionId, avatarUrl: sessionInfo.avatarUrl },
             { username: cleanedMyWxid, avatarUrl: myInfo.avatarUrl }
-          ]
+          ],
+          path.dirname(outputPath)
         )
         : new Map<string, string>()
 
@@ -2797,7 +2879,7 @@ class ExportService {
             : (sessionInfo.displayName || sessionId))
         const avatarData = avatarMap.get(isSenderMe ? cleanedMyWxid : msg.senderUsername)
         const avatarHtml = avatarData
-          ? `<img src="${this.escapeAttribute(avatarData)}" alt="${this.escapeAttribute(senderName)}" />`
+          ? `<img src="${this.escapeAttribute(encodeURI(avatarData))}" alt="${this.escapeAttribute(senderName)}" />`
           : `<span>${this.escapeHtml(this.getAvatarFallback(senderName))}</span>`
 
         const timeText = this.formatTimestamp(msg.createTime)
