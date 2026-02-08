@@ -316,6 +316,13 @@ export class WcdbService {
   }
 
   /**
+   * 获取双人报告统计数据
+   */
+  async getDualReportStats(sessionId: string, beginTimestamp: number, endTimestamp: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.callWorker('getDualReportStats', { sessionId, beginTimestamp, endTimestamp })
+  }
+
+  /**
    * 获取群聊统计
    */
   async getGroupStats(chatroomId: string, beginTimestamp: number = 0, endTimestamp: number = 0): Promise<{ success: boolean; data?: any; error?: string }> {

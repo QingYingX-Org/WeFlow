@@ -45,6 +45,11 @@ export interface DualReportData {
   } | null
   stats: DualReportStats
   topPhrases: Array<{ phrase: string; count: number }>
+  heatmap?: number[][]
+  initiative?: { initiated: number; received: number }
+  response?: { avg: number; fastest: number; count: number }
+  monthly?: Record<string, number>
+  streak?: { days: number; startDate: string; endDate: string }
 }
 
 class DualReportService {
@@ -75,7 +80,7 @@ class DualReportService {
     }
     const suffixMatch = trimmed.match(/^(.+)_([a-zA-Z0-9]{4})$/)
     const cleaned = suffixMatch ? suffixMatch[1] : trimmed
-    
+
     return cleaned
   }
 
@@ -327,122 +332,72 @@ class DualReportService {
       }
 
       this.reportProgress('统计聊天数据...', 30, onProgress)
+
+      const statsResult = await wcdbService.getDualReportStats(friendUsername, startTime, endTime)
+      if (!statsResult.success || !statsResult.data) {
+        return { success: false, error: statsResult.error || '获取双人报告统计失败' }
+      }
+
+      const cppData = statsResult.data
+      const counts = cppData.counts || {}
+
       const stats: DualReportStats = {
-        totalMessages: 0,
-        totalWords: 0,
-        imageCount: 0,
-        voiceCount: 0,
-        emojiCount: 0
-      }
-      const wordCountMap = new Map<string, number>()
-      const myEmojiCounts = new Map<string, number>()
-      const friendEmojiCounts = new Map<string, number>()
-      const myEmojiUrlMap = new Map<string, string>()
-      const friendEmojiUrlMap = new Map<string, string>()
-
-      const messageCountResult = await wcdbService.getMessageCount(friendUsername)
-      const totalForProgress = messageCountResult.success && messageCountResult.count
-        ? messageCountResult.count
-        : 0
-      let processed = 0
-      let lastProgressAt = 0
-
-      const cursorResult = await wcdbService.openMessageCursor(friendUsername, 1000, true, startTime, endTime)
-      if (!cursorResult.success || !cursorResult.cursor) {
-        return { success: false, error: cursorResult.error || '打开消息游标失败' }
+        totalMessages: counts.total || 0,
+        totalWords: counts.words || 0,
+        imageCount: counts.image || 0,
+        voiceCount: counts.voice || 0,
+        emojiCount: counts.emoji || 0
       }
 
-      try {
-        let hasMore = true
-        while (hasMore) {
-          const batch = await wcdbService.fetchMessageBatch(cursorResult.cursor)
-          if (!batch.success || !batch.rows) break
-          for (const row of batch.rows) {
-            const localType = parseInt(row.local_type || row.type || '1', 10)
-            const isSent = this.resolveIsSent(row, rawWxid, cleanedWxid)
-            stats.totalMessages += 1
+      // Process Emojis to find top for me and friend
+      let myTopEmojiMd5: string | undefined
+      let myTopEmojiUrl: string | undefined
+      let myTopCount = -1
 
-            if (localType === 3) stats.imageCount += 1
-            if (localType === 34) stats.voiceCount += 1
-            if (localType === 47) {
-              stats.emojiCount += 1
-              const content = this.decodeMessageContent(row.message_content, row.compress_content)
+      let friendTopEmojiMd5: string | undefined
+      let friendTopEmojiUrl: string | undefined
+      let friendTopCount = -1
+
+      if (cppData.emojis && Array.isArray(cppData.emojis)) {
+        for (const item of cppData.emojis) {
+          const rawContent = item.content || ''
+          const isMe = rawContent.startsWith('1:')
+          const content = rawContent.substring(2) // Remove "1:" or "0:" prefix
+          const count = item.count || 0
+
+          if (isMe) {
+            if (count > myTopCount) {
               const md5 = this.extractEmojiMd5(content)
-              const url = this.extractEmojiUrl(content)
               if (md5) {
-                const targetMap = isSent ? myEmojiCounts : friendEmojiCounts
-                targetMap.set(md5, (targetMap.get(md5) || 0) + 1)
-                if (url) {
-                  const urlMap = isSent ? myEmojiUrlMap : friendEmojiUrlMap
-                  if (!urlMap.has(md5)) urlMap.set(md5, url)
-                }
+                myTopCount = count
+                myTopEmojiMd5 = md5
+                myTopEmojiUrl = this.extractEmojiUrl(content)
               }
             }
-
-            if (localType === 1 || localType === 244813135921) {
-              const content = this.decodeMessageContent(row.message_content, row.compress_content)
-              const text = String(content || '').trim()
-              if (text.length > 0) {
-                stats.totalWords += text.replace(/\s+/g, '').length
-                const normalized = text.replace(/\s+/g, ' ').trim()
-                if (normalized.length >= 2 &&
-                  normalized.length <= 50 &&
-                  !normalized.includes('http') &&
-                  !normalized.includes('<') &&
-                  !normalized.startsWith('[') &&
-                  !normalized.startsWith('<?xml')) {
-                  wordCountMap.set(normalized, (wordCountMap.get(normalized) || 0) + 1)
-                }
+          } else {
+            if (count > friendTopCount) {
+              const md5 = this.extractEmojiMd5(content)
+              if (md5) {
+                friendTopCount = count
+                friendTopEmojiMd5 = md5
+                friendTopEmojiUrl = this.extractEmojiUrl(content)
               }
             }
-
-            if (totalForProgress > 0) {
-              processed++
-            }
-          }
-          hasMore = batch.hasMore === true
-
-          const now = Date.now()
-          if (now - lastProgressAt > 200) {
-            if (totalForProgress > 0) {
-              const ratio = Math.min(1, processed / totalForProgress)
-              const progress = 30 + Math.floor(ratio * 50)
-              this.reportProgress('统计聊天数据...', progress, onProgress)
-            }
-            lastProgressAt = now
           }
         }
-      } finally {
-        await wcdbService.closeMessageCursor(cursorResult.cursor)
       }
-
-      const pickTop = (map: Map<string, number>): string | undefined => {
-        let topKey: string | undefined
-        let topCount = -1
-        for (const [key, count] of map.entries()) {
-          if (count > topCount) {
-            topCount = count
-            topKey = key
-          }
-        }
-        return topKey
-      }
-
-      const myTopEmojiMd5 = pickTop(myEmojiCounts)
-      const friendTopEmojiMd5 = pickTop(friendEmojiCounts)
 
       stats.myTopEmojiMd5 = myTopEmojiMd5
+      stats.myTopEmojiUrl = myTopEmojiUrl
       stats.friendTopEmojiMd5 = friendTopEmojiMd5
-      stats.myTopEmojiUrl = myTopEmojiMd5 ? myEmojiUrlMap.get(myTopEmojiMd5) : undefined
-      stats.friendTopEmojiUrl = friendTopEmojiMd5 ? friendEmojiUrlMap.get(friendTopEmojiMd5) : undefined
+      stats.friendTopEmojiUrl = friendTopEmojiUrl
 
-      this.reportProgress('生成常用语词云...', 85, onProgress)
-      const topPhrases = Array.from(wordCountMap.entries())
-        .filter(([_, count]) => count >= 2)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 50)
-        .map(([phrase, count]) => ({ phrase, count }))
+      const topPhrases = (cppData.phrases || []).map((p: any) => ({
+        phrase: p.phrase,
+        count: p.count
+      }))
 
+      // Attach extra stats to the data object (needs interface update if strictly typed, but data is flexible)
       const reportData: DualReportData = {
         year: reportYear,
         selfName: myName,
@@ -452,8 +407,14 @@ class DualReportService {
         firstChatMessages,
         yearFirstChat,
         stats,
-        topPhrases
-      }
+        topPhrases,
+        // Append new C++ stats
+        heatmap: cppData.heatmap,
+        initiative: cppData.initiative,
+        response: cppData.response,
+        monthly: cppData.monthly,
+        streak: cppData.streak
+      } as any // Use as any to bypass strict type check for new fields, or update interface
 
       this.reportProgress('双人报告生成完成', 100, onProgress)
       return { success: true, data: reportData }

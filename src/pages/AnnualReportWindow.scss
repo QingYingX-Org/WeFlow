@@ -43,7 +43,7 @@
 
 // 背景装饰圆点 - 毛玻璃效果
 .bg-decoration {
-  position: absolute; // Changed from fixed
+  position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
@@ -53,10 +53,10 @@
 .deco-circle {
   position: absolute;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.03);
+  background: color-mix(in srgb, var(--primary) 3%, transparent);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
 
   &.c1 {
     width: 280px;
@@ -243,6 +243,7 @@
 }
 
 .exporting-snapshot {
+
   .hero-title,
   .label-text,
   .hero-desc,
@@ -1279,134 +1280,135 @@
   color: var(--ar-text-sub) !important;
   text-align: center;
 }
+
 // 曾经的好朋友 视觉效果
 .lost-friend-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  margin: 64px auto 48px;
+  position: relative;
+  max-width: 480px;
+
+  .avatar-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 2;
+
+    .avatar-label {
+      font-size: 13px;
+      color: var(--ar-text-sub);
+      font-weight: 500;
+      opacity: 0.6;
+    }
+
+    &.sender {
+      animation: fadeInRight 1s ease-out backwards;
+    }
+
+    &.receiver {
+      animation: fadeInLeft 1s ease-out backwards;
+    }
+  }
+
+  .fading-line {
+    position: relative;
+    flex: 1;
+    height: 2px;
+    min-width: 120px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 32px;
-    margin: 64px auto 48px;
-    position: relative;
-    max-width: 480px;
 
-    .avatar-group {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 12px;
-        z-index: 2;
-
-        .avatar-label {
-            font-size: 13px;
-            color: var(--ar-text-sub);
-            font-weight: 500;
-            opacity: 0.6;
-        }
-
-        &.sender {
-            animation: fadeInRight 1s ease-out backwards;
-        }
-
-        &.receiver {
-            animation: fadeInLeft 1s ease-out backwards;
-        }
+    .line-path {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to right,
+          var(--ar-primary) 0%,
+          rgba(var(--ar-primary-rgb), 0.4) 50%,
+          rgba(var(--ar-primary-rgb), 0.05) 100%);
+      border-radius: 2px;
     }
 
-    .fading-line {
-        position: relative;
-        flex: 1;
-        height: 2px;
-        min-width: 120px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        .line-path {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to right,
-                    var(--ar-primary) 0%,
-                    rgba(var(--ar-primary-rgb), 0.4) 50%,
-                    rgba(var(--ar-primary-rgb), 0.05) 100%);
-            border-radius: 2px;
-        }
-
-        .line-glow {
-            position: absolute;
-            inset: -4px 0;
-            background: linear-gradient(to right,
-                    rgba(var(--ar-primary-rgb), 0.2) 0%,
-                    transparent 100%);
-            filter: blur(8px);
-            pointer-events: none;
-        }
-
-        .flow-particle {
-            position: absolute;
-            width: 40px;
-            height: 2px;
-            background: linear-gradient(to right, transparent, var(--ar-primary), transparent);
-            border-radius: 2px;
-            opacity: 0;
-            animation: flowAcross 4s infinite linear;
-        }
+    .line-glow {
+      position: absolute;
+      inset: -4px 0;
+      background: linear-gradient(to right,
+          rgba(var(--ar-primary-rgb), 0.2) 0%,
+          transparent 100%);
+      filter: blur(8px);
+      pointer-events: none;
     }
+
+    .flow-particle {
+      position: absolute;
+      width: 40px;
+      height: 2px;
+      background: linear-gradient(to right, transparent, var(--ar-primary), transparent);
+      border-radius: 2px;
+      opacity: 0;
+      animation: flowAcross 4s infinite linear;
+    }
+  }
 }
 
 .hero-desc.fading {
-    opacity: 0.7;
-    font-style: italic;
-    font-size: 16px;
-    margin-top: 32px;
-    line-height: 1.8;
-    letter-spacing: 0.05em;
-    animation: fadeIn 1.5s ease-out 0.5s backwards;
+  opacity: 0.7;
+  font-style: italic;
+  font-size: 16px;
+  margin-top: 32px;
+  line-height: 1.8;
+  letter-spacing: 0.05em;
+  animation: fadeIn 1.5s ease-out 0.5s backwards;
 }
 
 @keyframes flowAcross {
-    0% {
-        left: -20%;
-        opacity: 0;
-    }
+  0% {
+    left: -20%;
+    opacity: 0;
+  }
 
-    10% {
-        opacity: 0.8;
-    }
+  10% {
+    opacity: 0.8;
+  }
 
-    50% {
-        opacity: 0.4;
-    }
+  50% {
+    opacity: 0.4;
+  }
 
-    90% {
-        opacity: 0.1;
-    }
+  90% {
+    opacity: 0.1;
+  }
 
-    100% {
-        left: 120%;
-        opacity: 0;
-    }
+  100% {
+    left: 120%;
+    opacity: 0;
+  }
 }
 
 @keyframes fadeInRight {
-    from {
-        opacity: 0;
-        transform: translateX(-20px);
-    }
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
 
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes fadeInLeft {
-    from {
-        opacity: 0;
-        transform: translateX(20px);
-    }
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
 
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
