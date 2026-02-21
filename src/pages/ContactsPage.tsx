@@ -10,7 +10,7 @@ interface ContactInfo {
     remark?: string
     nickname?: string
     avatarUrl?: string
-    type: 'friend' | 'group' | 'official' | 'deleted_friend' | 'other'
+    type: 'friend' | 'group' | 'official' | 'former_friend' | 'other'
 }
 
 function ContactsPage() {
@@ -21,8 +21,8 @@ function ContactsPage() {
     const [searchKeyword, setSearchKeyword] = useState('')
     const [contactTypes, setContactTypes] = useState({
         friends: true,
-        groups: true,
-        officials: true,
+        groups: false,
+        officials: false,
         deletedFriends: false
     })
 
@@ -94,7 +94,7 @@ function ContactsPage() {
             if (c.type === 'friend' && !contactTypes.friends) return false
             if (c.type === 'group' && !contactTypes.groups) return false
             if (c.type === 'official' && !contactTypes.officials) return false
-            if (c.type === 'deleted_friend' && !contactTypes.deletedFriends) return false
+            if (c.type === 'former_friend' && !contactTypes.deletedFriends) return false
             return true
         })
 
@@ -164,7 +164,7 @@ function ContactsPage() {
             case 'friend': return <User size={14} />
             case 'group': return <Users size={14} />
             case 'official': return <MessageSquare size={14} />
-            case 'deleted_friend': return <UserX size={14} />
+            case 'former_friend': return <UserX size={14} />
             default: return <User size={14} />
         }
     }
@@ -174,7 +174,7 @@ function ContactsPage() {
             case 'friend': return '好友'
             case 'group': return '群聊'
             case 'official': return '公众号'
-            case 'deleted_friend': return '已删除'
+            case 'former_friend': return '曾经的好友'
             default: return '其他'
         }
     }
@@ -292,7 +292,7 @@ function ContactsPage() {
                     </label>
                     <label className={`filter-chip ${contactTypes.deletedFriends ? 'active' : ''}`}>
                         <input type="checkbox" checked={contactTypes.deletedFriends} onChange={e => setContactTypes({ ...contactTypes, deletedFriends: e.target.checked })} />
-                        <UserX size={16} /><span>已删除</span>
+                        <UserX size={16} /><span>曾经的好友</span>
                     </label>
                 </div>
 

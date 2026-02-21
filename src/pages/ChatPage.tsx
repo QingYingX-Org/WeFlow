@@ -281,6 +281,8 @@ function ChatPage(_props: ChatPageProps) {
   const [highlightedMessageKeys, setHighlightedMessageKeys] = useState<string[]>([])
   const [isRefreshingSessions, setIsRefreshingSessions] = useState(false)
   const [hasInitialMessages, setHasInitialMessages] = useState(false)
+  const [noMessageTable, setNoMessageTable] = useState(false)
+  const [fallbackDisplayName, setFallbackDisplayName] = useState<string | null>(null)
   const [showVoiceTranscribeDialog, setShowVoiceTranscribeDialog] = useState(false)
   const [pendingVoiceTranscriptRequest, setPendingVoiceTranscriptRequest] = useState<{ sessionId: string; messageId: string } | null>(null)
 
@@ -857,6 +859,10 @@ function ChatPage(_props: ChatPageProps) {
       if (result.success && result.messages) {
         if (offset === 0) {
           setMessages(result.messages)
+          if (result.messages.length === 0) {
+            setNoMessageTable(true)
+            setHasMoreMessages(false)
+          }
 
           // 预取发送者信息：在关闭加载遮罩前处理
           const unreadCount = session?.unreadCount ?? 0
@@ -929,7 +935,7 @@ function ChatPage(_props: ChatPageProps) {
         }
         setCurrentOffset(offset + result.messages.length)
       } else if (!result.success) {
-        setConnectionError(result.error || '加载消息失败')
+        setNoMessageTable(true)
         setHasMoreMessages(false)
       }
     } catch (e) {
@@ -1247,6 +1253,7 @@ function ChatPage(_props: ChatPageProps) {
   useEffect(() => {
     if (currentSessionId !== prevSessionRef.current) {
       prevSessionRef.current = currentSessionId
+      setNoMessageTable(false)
       if (initialRevealTimerRef.current !== null) {
         window.clearTimeout(initialRevealTimerRef.current)
         initialRevealTimerRef.current = null
@@ -1260,11 +1267,11 @@ function ChatPage(_props: ChatPageProps) {
   }, [currentSessionId, messages.length, isLoadingMessages])
 
   useEffect(() => {
-    if (currentSessionId && messages.length === 0 && !isLoadingMessages && !isLoadingMore) {
+    if (currentSessionId && messages.length === 0 && !isLoadingMessages && !isLoadingMore && !noMessageTable) {
       setHasInitialMessages(false)
       loadMessages(currentSessionId, 0)
     }
-  }, [currentSessionId, messages.length, isLoadingMessages, isLoadingMore])
+  }, [currentSessionId, messages.length, isLoadingMessages, isLoadingMore, noMessageTable])
 
   useEffect(() => {
     return () => {
@@ -1340,9 +1347,23 @@ function ChatPage(_props: ChatPageProps) {
       sortTimestamp: 0,
       lastTimestamp: 0,
       lastMsgType: 0,
-      displayName: currentSessionId,
+      displayName: fallbackDisplayName || currentSessionId,
     } as ChatSession
   })()
+
+  // 从通讯录跳转时，会话不在列表中，主动加载联系人显示名称
+  useEffect(() => {
+    if (!currentSessionId) return
+    const found = Array.isArray(sessions) ? sessions.find(s => s.username === currentSessionId) : undefined
+    if (found) {
+      setFallbackDisplayName(null)
+      return
+    }
+    loadContactInfoBatch([currentSessionId]).then(() => {
+      const cached = senderAvatarCache.get(currentSessionId)
+      if (cached?.displayName) setFallbackDisplayName(cached.displayName)
+    })
+  }, [currentSessionId, sessions])
 
   // 判断是否为群聊
   const isGroupChat = (username: string) => username.includes('@chatroom')
