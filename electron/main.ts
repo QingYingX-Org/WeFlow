@@ -173,6 +173,20 @@ function createWindow(options: { autoShow?: boolean } = {}) {
     }
   )
 
+  // 忽略微信 CDN 域名的证书错误（部分节点证书配置不正确）
+  win.webContents.on('certificate-error', (event, url, _error, _cert, callback) => {
+    const trusted = ['.qq.com', '.qpic.cn', '.weixin.qq.com', '.wechat.com']
+    try {
+      const host = new URL(url).hostname
+      if (trusted.some(d => host.endsWith(d))) {
+        event.preventDefault()
+        callback(true)
+        return
+      }
+    } catch {}
+    callback(false)
+  })
+
   return win
 }
 

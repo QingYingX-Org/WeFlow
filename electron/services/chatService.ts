@@ -103,7 +103,7 @@ export interface ContactInfo {
   remark?: string
   nickname?: string
   avatarUrl?: string
-  type: 'friend' | 'group' | 'official' | 'deleted_friend' | 'other'
+  type: 'friend' | 'group' | 'official' | 'former_friend' | 'other'
 }
 
 // 表情包缓存
@@ -603,7 +603,7 @@ class ChatService {
       // 使用execQuery直接查询加密的contact.db
       // kind='contact', path=null表示使用已打开的contact.db
       const contactQuery = `
-        SELECT username, remark, nick_name, alias, local_type, flag
+        SELECT username, remark, nick_name, alias, local_type, flag, quan_pin
         FROM contact
       `
 
@@ -651,48 +651,23 @@ class ChatService {
       for (const row of rows) {
         const username = row.username || ''
 
-        // 过滤系统账号和特殊账号 - 完全复制cipher的逻辑
         if (!username) continue
-        if (username === 'filehelper' || username === 'fmessage' || username === 'floatbottle' ||
-          username === 'medianote' || username === 'newsapp' || username.startsWith('fake_') ||
-          username === 'weixin' || username === 'qmessage' || username === 'qqmail' ||
-          username === 'tmessage' || username.startsWith('wxid_') === false &&
-          username.includes('@') === false && username.startsWith('gh_') === false &&
-          /^[a-zA-Z0-9_-]+$/.test(username) === false) {
-          continue
-        }
 
-        // 判断类型 - 正确规则：wxid开头且有alias的是好友
-        let type: 'friend' | 'group' | 'official' | 'deleted_friend' | 'other' = 'other'
-        const localType = row.local_type || 0
-
+        const excludeNames = ['medianote', 'floatbottle', 'qmessage', 'qqmail', 'fmessage']
+        let type: 'friend' | 'group' | 'official' | 'former_friend' | 'other' = 'other'
+        const localType = this.getRowInt(row, ['local_type', 'localType', 'WCDB_CT_local_type'], 0)
         const flag = Number(row.flag ?? 0)
+        const quanPin = this.getRowField(row, ['quan_pin', 'quanPin', 'WCDB_CT_quan_pin']) || ''
 
         if (username.includes('@chatroom')) {
           type = 'group'
         } else if (username.startsWith('gh_')) {
-          if (flag === 0) continue
           type = 'official'
-        } else if (localType === 3 || localType === 4) {
-          if (flag === 0) continue
-          if (flag === 4) continue
-          type = 'official'
-        } else if (username.startsWith('wxid_') && row.alias) {
-          type = flag === 0 ? 'deleted_friend' : 'friend'
-        } else if (localType === 1) {
-          type = flag === 0 ? 'deleted_friend' : 'friend'
-        } else if (localType === 2) {
-          // local_type=2 是群成员但非好友，跳过
-          continue
-        } else if (localType === 0) {
-          // local_type=0 可能是好友或其他，检查是否有备注或昵称
-          if (row.remark || row.nick_name) {
-            type = flag === 0 ? 'deleted_friend' : 'friend'
-          } else {
-            continue
-          }
+        } else if (/^(?!.*(gh_|@chatroom)).*$/.test(username) && localType === 1 && !excludeNames.includes(username)) {
+          type = 'friend'
+        } else if (/^(?!.*(gh_|@chatroom)).*$/.test(username) && localType === 0 && quanPin) {
+          type = 'former_friend'
         } else {
-          // 其他未知类型，跳过
           continue
         }
 

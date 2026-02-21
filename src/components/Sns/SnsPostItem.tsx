@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react'
-import { Heart, ChevronRight, ImageIcon, Download, Code, MoreHorizontal } from 'lucide-react'
+import { Heart, ChevronRight, ImageIcon, Download, Code, MoreHorizontal, Trash2 } from 'lucide-react'
 import { SnsPost, SnsLinkCardData } from '../../types/sns'
 import { Avatar } from '../Avatar'
 import { SnsMediaGrid } from './SnsMediaGrid'
+import { getEmojiPath } from 'wechat-emojis'
 
 // Helper functions (extracted from SnsPage.tsx but simplified/reused)
 const LINK_XML_URL_TAGS = ['url', 'shorturl', 'weburl', 'webpageurl', 'jumpurl']
@@ -64,6 +65,21 @@ const isLikelyMediaAssetUrl = (url: string): boolean => {
 }
 
 const buildLinkCardData = (post: SnsPost): SnsLinkCardData | null => {
+    // type 3 是链接类型，直接用 media[0] 的 url 和 thumb
+    if (post.type === 3) {
+        const url = post.media[0]?.url || post.linkUrl
+        if (!url) return null
+        const titleCandidates = [
+            post.linkTitle || '',
+            ...getXmlTagValues(post.rawXml || '', LINK_XML_TITLE_TAGS),
+            post.contentDesc || ''
+        ]
+        const title = titleCandidates
+            .map((v) => decodeHtmlEntities(v))
+            .find((v) => Boolean(v) && !/^https?:\/\//i.test(v))
+        return { url, title: title || '网页链接', thumb: post.media[0]?.thumb }
+    }
+
     const hasVideoMedia = post.type === 15 || post.media.some((item) => isSnsVideoUrl(item.url))
     if (hasVideoMedia) return null
 
@@ -169,6 +185,7 @@ interface SnsPostItemProps {
 }
 
 export const SnsPostItem: React.FC<SnsPostItemProps> = ({ post, onPreview, onDebug }) => {
+    const [mediaDeleted, setMediaDeleted] = useState(false)
     const linkCard = buildLinkCardData(post)
     const hasVideoMedia = post.type === 15 || post.media.some((item) => isSnsVideoUrl(item.url))
     const showLinkCard = Boolean(linkCard) && post.media.length <= 1 && !hasVideoMedia
@@ -187,11 +204,25 @@ export const SnsPostItem: React.FC<SnsPostItemProps> = ({ post, onPreview, onDeb
         })
     }
 
-    // Add extra class for media-only posts (no text) to adjust spacing?
-    // Not strictly needed but good to know
+    // 解析微信表情
+    const renderTextWithEmoji = (text: string) => {
+        if (!text) return text
+        const parts = text.split(/\[(.*?)\]/g)
+        return parts.map((part, index) => {
+            if (index % 2 === 1) {
+                // @ts-ignore
+                const path = getEmojiPath(part as any)
+                if (path) {
+                    return <img key={index} src={`${import.meta.env.BASE_URL}${path}`} alt={`[${part}]`} className="inline-emoji" style={{ width: 22, height: 22, verticalAlign: 'bottom', margin: '0 1px' }} />
+                }
+                return `[${part}]`
+            }
+            return part
+        })
+    }
 
     return (
-        <div className="sns-post-item">
+        <div className={`sns-post-item ${mediaDeleted ? 'post-deleted' : ''}`}>
             <div className="post-avatar-col">
                 <Avatar
                     src={post.avatarUrl}
@@ -207,16 +238,24 @@ export const SnsPostItem: React.FC<SnsPostItemProps> = ({ post, onPreview, onDeb
                         <span className="author-name">{decodeHtmlEntities(post.nickname)}</span>
                         <span className="post-time">{formatTime(post.createTime)}</span>
                     </div>
-                    <button className="icon-btn-ghost debug-btn" onClick={(e) => {
-                        e.stopPropagation();
-                        onDebug(post);
-                    }} title="查看原始数据">
-                        <Code size={14} />
-                    </button>
+                    <div className="post-header-actions">
+                        {mediaDeleted && (
+                            <span className="post-deleted-badge">
+                                <Trash2 size={12} />
+                                <span>已删除</span>
+                            </span>
+                        )}
+                        <button className="icon-btn-ghost debug-btn" onClick={(e) => {
+                            e.stopPropagation();
+                            onDebug(post);
+                        }} title="查看原始数据">
+                            <Code size={14} />
+                        </button>
+                    </div>
                 </div>
 
                 {post.contentDesc && (
-                    <div className="post-text">{decodeHtmlEntities(post.contentDesc)}</div>
+                    <div className="post-text">{renderTextWithEmoji(decodeHtmlEntities(post.contentDesc))}</div>
                 )}
 
                 {showLinkCard && linkCard && (
@@ -225,7 +264,7 @@ export const SnsPostItem: React.FC<SnsPostItemProps> = ({ post, onPreview, onDeb
 
                 {showMediaGrid && (
                     <div className="post-media-container">
-                        <SnsMediaGrid mediaList={post.media} onPreview={onPreview} />
+                        <SnsMediaGrid mediaList={post.media} onPreview={onPreview} onMediaDeleted={[1, 54].includes(post.type ?? 0) ? () => setMediaDeleted(true) : undefined} />
                     </div>
                 )}
 
@@ -250,7 +289,7 @@ export const SnsPostItem: React.FC<SnsPostItemProps> = ({ post, onPreview, onDeb
                                             </>
                                         )}
                                         <span className="comment-colon">：</span>
-                                        <span className="comment-content">{c.content}</span>
+                                        <span className="comment-content">{renderTextWithEmoji(c.content)}</span>
                                     </div>
                                 ))}
                             </div>

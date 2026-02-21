@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Play, Lock, Download } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Play, Lock, Download, ImageOff } from 'lucide-react'
 import { LivePhotoIcon } from '../../components/LivePhotoIcon'
 import { RefreshCw } from 'lucide-react'
 
@@ -22,6 +22,7 @@ interface SnsMedia {
 interface SnsMediaGridProps {
     mediaList: SnsMedia[]
     onPreview: (src: string, isVideo?: boolean, liveVideoPath?: string) => void
+    onMediaDeleted?: () => void
 }
 
 const isSnsVideoUrl = (url?: string): boolean => {
@@ -79,9 +80,13 @@ const extractVideoFrame = async (videoPath: string): Promise<string> => {
     })
 }
 
-const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: string, isVideo?: boolean, liveVideoPath?: string) => void }) => {
+const MediaItem = ({ media, onPreview, onMediaDeleted }: { media: SnsMedia; onPreview: (src: string, isVideo?: boolean, liveVideoPath?: string) => void; onMediaDeleted?: () => void }) => {
     const [error, setError] = useState(false)
+    const [deleted, setDeleted] = useState(false)
     const [loading, setLoading] = useState(true)
+    const markDeleted = () => { setDeleted(true); onMediaDeleted?.() }
+    const retryCount = useRef(0)
+    const [retryKey, setRetryKey] = useState(0)
     const [thumbSrc, setThumbSrc] = useState<string>('')
     const [videoPath, setVideoPath] = useState<string>('')
     const [liveVideoPath, setLiveVideoPath] = useState<string>('')
@@ -91,6 +96,16 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
     const isVideo = isSnsVideoUrl(media.url)
     const isLive = !!media.livePhoto
     const targetUrl = media.thumb || media.url
+
+    // 视频重试：失败时重试最多2次，耗尽才标记删除
+    const videoRetryOrDelete = () => {
+        if (retryCount.current < 2) {
+            retryCount.current++
+            setRetryKey(k => k + 1)
+        } else {
+            markDeleted()
+        }
+    }
 
     // Simple effect to load image/decrypt
     // Simple effect to load image/decrypt
@@ -112,7 +127,7 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
                         if (result.dataUrl) setThumbSrc(result.dataUrl)
                         else if (result.videoPath) setThumbSrc(`file://${result.videoPath.replace(/\\/g, '/')}`)
                     } else {
-                        setThumbSrc(targetUrl)
+                        markDeleted()
                     }
 
                     // Pre-load live photo video if needed
@@ -149,11 +164,11 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
                             if (!cancelled) setThumbSrc(coverDataUrl)
                         } catch (err) {
                             console.error('Frame extraction failed', err)
-                            // Fallback to video path if extraction fails, though it might be black
-                            // Only set thumbSrc if extraction fails, so we don't override the generated one
+                            // 封面提取失败，用视频路径作为 fallback，让 <video> 标签显示
+                            if (!cancelled) setThumbSrc(localPath)
                         }
                     } else {
-                        console.error('Video decryption for cover failed')
+                        videoRetryOrDelete()
                     }
 
                     setIsGeneratingCover(false)
@@ -162,7 +177,11 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
             } catch (e) {
                 console.error(e)
                 if (!cancelled) {
-                    setThumbSrc(targetUrl)
+                    if (isVideo) {
+                        videoRetryOrDelete()
+                    } else {
+                        markDeleted()
+                    }
                     setLoading(false)
                     setIsGeneratingCover(false)
                 }
@@ -171,7 +190,7 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
 
         load()
         return () => { cancelled = true }
-    }, [media, isVideo, isLive, targetUrl])
+    }, [media, isVideo, isLive, targetUrl, retryKey])
 
     const handlePreview = async (e: React.MouseEvent) => {
         e.stopPropagation()
@@ -248,6 +267,17 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
         }
     }
 
+    if (deleted) {
+        return (
+            <div className="sns-media-item deleted-media">
+                <div className="deleted-placeholder">
+                    <ImageOff size={24} />
+                    <span>已删除</span>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div
             className={`sns-media-item ${isDecrypting ? 'decrypting' : ''}`}
@@ -267,15 +297,15 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
                         e.currentTarget.currentTime = 0.1
                     }}
                 />
-            ) : (
+            ) : thumbSrc ? (
                 <img
-                    src={thumbSrc || targetUrl}
+                    src={thumbSrc}
                     className="media-image"
                     loading="lazy"
-                    onError={() => setError(true)}
+                    onError={() => { if (!loading && !isVideo) markDeleted() }}
                     alt=""
                 />
-            )}
+            ) : null}
 
             {isGeneratingCover && (
                 <div className="media-decrypting-mask">
@@ -304,7 +334,7 @@ const MediaItem = ({ media, onPreview }: { media: SnsMedia; onPreview: (src: str
     )
 }
 
-export const SnsMediaGrid: React.FC<SnsMediaGridProps> = ({ mediaList, onPreview }) => {
+export const SnsMediaGrid: React.FC<SnsMediaGridProps> = ({ mediaList, onPreview, onMediaDeleted }) => {
     if (!mediaList || mediaList.length === 0) return null
 
     const count = mediaList.length
@@ -320,7 +350,7 @@ export const SnsMediaGrid: React.FC<SnsMediaGridProps> = ({ mediaList, onPreview
     return (
         <div className={`sns-media-grid ${gridClass}`}>
             {mediaList.map((media, idx) => (
-                <MediaItem key={idx} media={media} onPreview={onPreview} />
+                <MediaItem key={idx} media={media} onPreview={onPreview} onMediaDeleted={onMediaDeleted} />
             ))}
         </div>
     )
