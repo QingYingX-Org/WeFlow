@@ -103,7 +103,7 @@ export interface ContactInfo {
   remark?: string
   nickname?: string
   avatarUrl?: string
-  type: 'friend' | 'group' | 'official' | 'other'
+  type: 'friend' | 'group' | 'official' | 'deleted_friend' | 'other'
 }
 
 // 表情包缓存
@@ -603,7 +603,7 @@ class ChatService {
       // 使用execQuery直接查询加密的contact.db
       // kind='contact', path=null表示使用已打开的contact.db
       const contactQuery = `
-        SELECT username, remark, nick_name, alias, local_type
+        SELECT username, remark, nick_name, alias, local_type, flag
         FROM contact
       `
 
@@ -663,28 +663,31 @@ class ChatService {
         }
 
         // 判断类型 - 正确规则：wxid开头且有alias的是好友
-        let type: 'friend' | 'group' | 'official' | 'other' = 'other'
+        let type: 'friend' | 'group' | 'official' | 'deleted_friend' | 'other' = 'other'
         const localType = row.local_type || 0
+
+        const flag = Number(row.flag ?? 0)
 
         if (username.includes('@chatroom')) {
           type = 'group'
         } else if (username.startsWith('gh_')) {
+          if (flag === 0) continue
           type = 'official'
         } else if (localType === 3 || localType === 4) {
+          if (flag === 0) continue
+          if (flag === 4) continue
           type = 'official'
         } else if (username.startsWith('wxid_') && row.alias) {
-          // wxid开头且有alias的是好友
-          type = 'friend'
+          type = flag === 0 ? 'deleted_friend' : 'friend'
         } else if (localType === 1) {
-          // local_type=1 也是好友
-          type = 'friend'
+          type = flag === 0 ? 'deleted_friend' : 'friend'
         } else if (localType === 2) {
           // local_type=2 是群成员但非好友，跳过
           continue
         } else if (localType === 0) {
           // local_type=0 可能是好友或其他，检查是否有备注或昵称
           if (row.remark || row.nick_name) {
-            type = 'friend'
+            type = flag === 0 ? 'deleted_friend' : 'friend'
           } else {
             continue
           }

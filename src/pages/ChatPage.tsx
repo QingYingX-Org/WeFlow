@@ -1261,6 +1261,7 @@ function ChatPage(_props: ChatPageProps) {
 
   useEffect(() => {
     if (currentSessionId && messages.length === 0 && !isLoadingMessages && !isLoadingMore) {
+      setHasInitialMessages(false)
       loadMessages(currentSessionId, 0)
     }
   }, [currentSessionId, messages.length, isLoadingMessages, isLoadingMore])
@@ -1327,8 +1328,21 @@ function ChatPage(_props: ChatPageProps) {
     return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
   }, [])
 
-  // 获取当前会话信息
-  const currentSession = Array.isArray(sessions) ? sessions.find(s => s.username === currentSessionId) : undefined
+  // 获取当前会话信息（从通讯录跳转时可能不在 sessions 列表中，构造 fallback）
+  const currentSession = (() => {
+    const found = Array.isArray(sessions) ? sessions.find(s => s.username === currentSessionId) : undefined
+    if (found || !currentSessionId) return found
+    return {
+      username: currentSessionId,
+      type: 0,
+      unreadCount: 0,
+      summary: '',
+      sortTimestamp: 0,
+      lastTimestamp: 0,
+      lastMsgType: 0,
+      displayName: currentSessionId,
+    } as ChatSession
+  })()
 
   // 判断是否为群聊
   const isGroupChat = (username: string) => username.includes('@chatroom')
@@ -2045,6 +2059,13 @@ function ChatPage(_props: ChatPageProps) {
                     ) : (
                       <span>向上滚动加载更多</span>
                     )}
+                  </div>
+                )}
+
+                {!isLoadingMessages && messages.length === 0 && !hasMoreMessages && (
+                  <div className="empty-chat-inline">
+                    <MessageSquare size={32} />
+                    <span>该联系人没有聊天记录</span>
                   </div>
                 )}
 

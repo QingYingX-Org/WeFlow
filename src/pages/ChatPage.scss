@@ -1288,6 +1288,21 @@
   z-index: 2;
 }
 
+.empty-chat-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 0;
+  color: var(--text-tertiary);
+  font-size: 14px;
+
+  svg {
+    opacity: 0.4;
+  }
+}
+
 .message-list * {
   -webkit-app-region: no-drag !important;
 }

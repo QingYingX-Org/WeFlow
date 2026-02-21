@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, RefreshCw, X, User, Users, MessageSquare, Loader2, FolderOpen, Download, ChevronDown } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Search, RefreshCw, X, User, Users, MessageSquare, Loader2, FolderOpen, Download, ChevronDown, MessageCircle, UserX } from 'lucide-react'
+import { useChatStore } from '../stores/chatStore'
 import './ContactsPage.scss'
 
 interface ContactInfo {
@@ -8,7 +10,7 @@ interface ContactInfo {
     remark?: string
     nickname?: string
     avatarUrl?: string
-    type: 'friend' | 'group' | 'official' | 'other'
+    type: 'friend' | 'group' | 'official' | 'deleted_friend' | 'other'
 }
 
 function ContactsPage() {
@@ -20,8 +22,15 @@ function ContactsPage() {
     const [contactTypes, setContactTypes] = useState({
         friends: true,
         groups: true,
-        officials: true
+        officials: true,
+        deletedFriends: false
     })
+
+    // 导出模式与查看详情
+    const [exportMode, setExportMode] = useState(false)
+    const [selectedContact, setSelectedContact] = useState<ContactInfo | null>(null)
+    const navigate = useNavigate()
+    const { setCurrentSession } = useChatStore()
 
     // 导出相关状态
     const [exportFormat, setExportFormat] = useState<'json' | 'csv' | 'vcf'>('json')
@@ -85,6 +94,7 @@ function ContactsPage() {
             if (c.type === 'friend' && !contactTypes.friends) return false
             if (c.type === 'group' && !contactTypes.groups) return false
             if (c.type === 'official' && !contactTypes.officials) return false
+            if (c.type === 'deleted_friend' && !contactTypes.deletedFriends) return false
             return true
         })
 
@@ -154,6 +164,7 @@ function ContactsPage() {
             case 'friend': return <User size={14} />
             case 'group': return <Users size={14} />
             case 'official': return <MessageSquare size={14} />
+            case 'deleted_friend': return <UserX size={14} />
             default: return <User size={14} />
         }
     }
@@ -163,6 +174,7 @@ function ContactsPage() {
             case 'friend': return '好友'
             case 'group': return '群聊'
             case 'official': return '公众号'
+            case 'deleted_friend': return '已删除'
             default: return '其他'
         }
     }
@@ -236,9 +248,18 @@ function ContactsPage() {
             <div className="contacts-panel">
                 <div className="panel-header">
                     <h2>通讯录</h2>
-                    <button className="icon-btn" onClick={loadContacts} disabled={isLoading}>
-                        <RefreshCw size={18} className={isLoading ? 'spin' : ''} />
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button
+                            className={`icon-btn export-mode-btn ${exportMode ? 'active' : ''}`}
+                            onClick={() => { setExportMode(!exportMode); setSelectedContact(null) }}
+                            title={exportMode ? '退出导出模式' : '进入导出模式'}
+                        >
+                            <Download size={18} />
+                        </button>
+                        <button className="icon-btn" onClick={loadContacts} disabled={isLoading}>
+                            <RefreshCw size={18} className={isLoading ? 'spin' : ''} />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="search-bar">
@@ -258,49 +279,41 @@ function ContactsPage() {
 
                 <div className="type-filters">
                     <label className={`filter-chip ${contactTypes.friends ? 'active' : ''}`}>
-                        <input
-                            type="checkbox"
-                            checked={contactTypes.friends}
-                            onChange={e => setContactTypes({ ...contactTypes, friends: e.target.checked })}
-                        />
-                        <User size={16} />
-                        <span>好友</span>
+                        <input type="checkbox" checked={contactTypes.friends} onChange={e => setContactTypes({ ...contactTypes, friends: e.target.checked })} />
+                        <User size={16} /><span>好友</span>
                     </label>
                     <label className={`filter-chip ${contactTypes.groups ? 'active' : ''}`}>
-                        <input
-                            type="checkbox"
-                            checked={contactTypes.groups}
-                            onChange={e => setContactTypes({ ...contactTypes, groups: e.target.checked })}
-                        />
-                        <Users size={16} />
-                        <span>群聊</span>
+                        <input type="checkbox" checked={contactTypes.groups} onChange={e => setContactTypes({ ...contactTypes, groups: e.target.checked })} />
+                        <Users size={16} /><span>群聊</span>
                     </label>
                     <label className={`filter-chip ${contactTypes.officials ? 'active' : ''}`}>
-                        <input
-                            type="checkbox"
-                            checked={contactTypes.officials}
-                            onChange={e => setContactTypes({ ...contactTypes, officials: e.target.checked })}
-                        />
-                        <MessageSquare size={16} />
-                        <span>公众号</span>
+                        <input type="checkbox" checked={contactTypes.officials} onChange={e => setContactTypes({ ...contactTypes, officials: e.target.checked })} />
+                        <MessageSquare size={16} /><span>公众号</span>
+                    </label>
+                    <label className={`filter-chip ${contactTypes.deletedFriends ? 'active' : ''}`}>
+                        <input type="checkbox" checked={contactTypes.deletedFriends} onChange={e => setContactTypes({ ...contactTypes, deletedFriends: e.target.checked })} />
+                        <UserX size={16} /><span>已删除</span>
                     </label>
                 </div>
 
                 <div className="contacts-count">
                     共 {filteredContacts.length} 个联系人
                 </div>
-                <div className="selection-toolbar">
-                    <label className="checkbox-item">
-                        <input
-                            type="checkbox"
-                            checked={allFilteredSelected}
-                            onChange={e => toggleAllFilteredSelected(e.target.checked)}
-                            disabled={filteredContacts.length === 0}
-                        />
-                        <span>全选当前筛选结果</span>
-                    </label>
-                    <span className="selection-count">已选 {selectedUsernames.size}（当前筛选 {selectedInFilteredCount} / {filteredContacts.length}）</span>
-                </div>
+
+                {exportMode && (
+                    <div className="selection-toolbar">
+                        <label className="checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={allFilteredSelected}
+                                onChange={e => toggleAllFilteredSelected(e.target.checked)}
+                                disabled={filteredContacts.length === 0}
+                            />
+                            <span>全选当前筛选结果</span>
+                        </label>
+                        <span className="selection-count">已选 {selectedUsernames.size}（当前筛选 {selectedInFilteredCount} / {filteredContacts.length}）</span>
+                    </div>
+                )}
 
                 {isLoading ? (
                     <div className="loading-state">
@@ -314,20 +327,29 @@ function ContactsPage() {
                 ) : (
                     <div className="contacts-list">
                         {filteredContacts.map(contact => {
-                            const isSelected = selectedUsernames.has(contact.username)
+                            const isChecked = selectedUsernames.has(contact.username)
+                            const isActive = !exportMode && selectedContact?.username === contact.username
                             return (
                                 <div
                                     key={contact.username}
-                                    className={`contact-item ${isSelected ? 'selected' : ''}`}
-                                    onClick={() => toggleContactSelected(contact.username, !isSelected)}
+                                    className={`contact-item ${exportMode && isChecked ? 'selected' : ''} ${isActive ? 'active' : ''}`}
+                                    onClick={() => {
+                                        if (exportMode) {
+                                            toggleContactSelected(contact.username, !isChecked)
+                                        } else {
+                                            setSelectedContact(isActive ? null : contact)
+                                        }
+                                    }}
                                 >
-                                    <label className="contact-select" onClick={e => e.stopPropagation()}>
-                                        <input
-                                            type="checkbox"
-                                            checked={isSelected}
-                                            onChange={e => toggleContactSelected(contact.username, e.target.checked)}
-                                        />
-                                    </label>
+                                    {exportMode && (
+                                        <label className="contact-select" onClick={e => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={e => toggleContactSelected(contact.username, e.target.checked)}
+                                            />
+                                        </label>
+                                    )}
                                     <div className="contact-avatar">
                                         {contact.avatarUrl ? (
                                             <img src={contact.avatarUrl} alt="" />
@@ -352,90 +374,129 @@ function ContactsPage() {
                 )}
             </div>
 
-            {/* 右侧：导出设置 */}
-            <div className="settings-panel">
-                <div className="panel-header">
-                    <h2>导出设置</h2>
-                </div>
+            {/* 右侧面板 */}
+            {exportMode ? (
+                <div className="settings-panel">
+                    <div className="panel-header">
+                        <h2>导出设置</h2>
+                    </div>
 
-                <div className="settings-content">
-                    <div className="setting-section">
-                        <h3>导出格式</h3>
-                        <div className="format-select" ref={formatDropdownRef}>
-                            <button
-                                type="button"
-                                className={`select-trigger ${showFormatSelect ? 'open' : ''}`}
-                                onClick={() => setShowFormatSelect(!showFormatSelect)}
-                            >
-                                <span className="select-value">{getOptionLabel(exportFormat)}</span>
-                                <ChevronDown size={16} />
+                    <div className="settings-content">
+                        <div className="setting-section">
+                            <h3>导出格式</h3>
+                            <div className="format-select" ref={formatDropdownRef}>
+                                <button
+                                    type="button"
+                                    className={`select-trigger ${showFormatSelect ? 'open' : ''}`}
+                                    onClick={() => setShowFormatSelect(!showFormatSelect)}
+                                >
+                                    <span className="select-value">{getOptionLabel(exportFormat)}</span>
+                                    <ChevronDown size={16} />
+                                </button>
+                                {showFormatSelect && (
+                                    <div className="select-dropdown">
+                                        {exportFormatOptions.map(option => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                className={`select-option ${exportFormat === option.value ? 'active' : ''}`}
+                                                onClick={() => {
+                                                    setExportFormat(option.value as 'json' | 'csv' | 'vcf')
+                                                    setShowFormatSelect(false)
+                                                }}
+                                            >
+                                                <span className="option-label">{option.label}</span>
+                                                <span className="option-desc">{option.desc}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="setting-section">
+                            <h3>导出选项</h3>
+                            <label className="checkbox-item">
+                                <input type="checkbox" checked={exportAvatars} onChange={e => setExportAvatars(e.target.checked)} />
+                                <span>导出头像</span>
+                            </label>
+                        </div>
+
+                        <div className="setting-section">
+                            <h3>导出位置</h3>
+                            <div className="export-path-display">
+                                <FolderOpen size={16} />
+                                <span>{exportFolder || '未设置'}</span>
+                            </div>
+                            <button className="select-folder-btn" onClick={selectExportFolder}>
+                                <FolderOpen size={16} />
+                                <span>选择导出目录</span>
                             </button>
-                            {showFormatSelect && (
-                                <div className="select-dropdown">
-                                    {exportFormatOptions.map(option => (
-                                        <button
-                                            key={option.value}
-                                            type="button"
-                                            className={`select-option ${exportFormat === option.value ? 'active' : ''}`}
-                                            onClick={() => {
-                                                setExportFormat(option.value as 'json' | 'csv' | 'vcf')
-                                                setShowFormatSelect(false)
-                                            }}
-                                        >
-                                            <span className="option-label">{option.label}</span>
-                                            <span className="option-desc">{option.desc}</span>
-                                        </button>
-                                    ))}
-                                </div>
+                        </div>
+                    </div>
+
+                    <div className="export-action">
+                        <button
+                            className="export-btn"
+                            onClick={startExport}
+                            disabled={!exportFolder || isExporting || selectedUsernames.size === 0}
+                        >
+                            {isExporting ? (
+                                <><Loader2 size={18} className="spin" /><span>导出中...</span></>
+                            ) : (
+                                <><Download size={18} /><span>开始导出</span></>
                             )}
-                        </div>
-                    </div>
-
-                    <div className="setting-section">
-                        <h3>导出选项</h3>
-                        <label className="checkbox-item">
-                            <input
-                                type="checkbox"
-                                checked={exportAvatars}
-                                onChange={e => setExportAvatars(e.target.checked)}
-                            />
-                            <span>导出头像</span>
-                        </label>
-                    </div>
-
-                    <div className="setting-section">
-                        <h3>导出位置</h3>
-                        <div className="export-path-display">
-                            <FolderOpen size={16} />
-                            <span>{exportFolder || '未设置'}</span>
-                        </div>
-                        <button className="select-folder-btn" onClick={selectExportFolder}>
-                            <FolderOpen size={16} />
-                            <span>选择导出目录</span>
                         </button>
                     </div>
                 </div>
+            ) : selectedContact ? (
+                <div className="settings-panel">
+                    <div className="panel-header">
+                        <h2>联系人详情</h2>
+                    </div>
+                    <div className="settings-content">
+                        <div className="detail-profile">
+                            <div className="detail-avatar">
+                                {selectedContact.avatarUrl ? (
+                                    <img src={selectedContact.avatarUrl} alt="" />
+                                ) : (
+                                    <span>{getAvatarLetter(selectedContact.displayName)}</span>
+                                )}
+                            </div>
+                            <div className="detail-name">{selectedContact.displayName}</div>
+                            <div className={`contact-type ${selectedContact.type}`}>
+                                {getContactTypeIcon(selectedContact.type)}
+                                <span>{getContactTypeName(selectedContact.type)}</span>
+                            </div>
+                        </div>
 
-                <div className="export-action">
-                    <button
-                        className="export-btn"
-                        onClick={startExport}
-                        disabled={!exportFolder || isExporting || selectedUsernames.size === 0}
-                    >
-                        {isExporting ? (
-                            <>
-                                <Loader2 size={18} className="spin" />
-                                <span>导出中...</span>
-                            </>
-                        ) : (
-                            <>
-                                <Download size={18} />
-                                <span>开始导出</span>
-                            </>
-                        )}
-                    </button>
+                        <div className="detail-info-list">
+                            <div className="detail-row"><span className="detail-label">用户名</span><span className="detail-value">{selectedContact.username}</span></div>
+                            <div className="detail-row"><span className="detail-label">昵称</span><span className="detail-value">{selectedContact.nickname || selectedContact.displayName}</span></div>
+                            {selectedContact.remark && <div className="detail-row"><span className="detail-label">备注</span><span className="detail-value">{selectedContact.remark}</span></div>}
+                            <div className="detail-row"><span className="detail-label">类型</span><span className="detail-value">{getContactTypeName(selectedContact.type)}</span></div>
+                        </div>
+
+                        <button
+                            className="goto-chat-btn"
+                            onClick={() => {
+                                setCurrentSession(selectedContact.username)
+                                navigate('/chat')
+                            }}
+                        >
+                            <MessageCircle size={18} />
+                            <span>查看聊天记录</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className="settings-panel">
+                    <div className="empty-detail">
+                        <User size={48} />
+                        <span>点击左侧联系人查看详情</span>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
