@@ -7,7 +7,7 @@ import { dialog } from '../services/ipc'
 import * as configService from '../services/config'
 import {
   Eye, EyeOff, FolderSearch, FolderOpen, Search, Copy,
-  RotateCcw, Trash2, Plug, Check, Sun, Moon,
+  RotateCcw, Trash2, Plug, Check, Sun, Moon, Monitor,
   Palette, Database, Download, HardDrive, Info, RefreshCw, ChevronDown, Mic,
   ShieldCheck, Fingerprint, Lock, KeyRound, Bell, Globe, BarChart2
 } from 'lucide-react'
@@ -55,6 +55,14 @@ function SettingsPage() {
 
   const resetChatStore = useChatStore((state) => state.reset)
   const { currentTheme, themeMode, setTheme, setThemeMode } = useThemeStore()
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  const effectiveMode = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode
   const clearAnalyticsStoreCache = useAnalyticsStore((state) => state.clearCache)
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
@@ -82,10 +90,6 @@ function SettingsPage() {
   const [whisperDownloadProgress, setWhisperDownloadProgress] = useState(0)
   const [whisperProgressData, setWhisperProgressData] = useState<{ downloaded: number; total: number; speed: number }>({ downloaded: 0, total: 0, speed: 0 })
   const [whisperModelStatus, setWhisperModelStatus] = useState<{ exists: boolean; modelPath?: string; tokensPath?: string } | null>(null)
-  const [llamaModelStatus, setLlamaModelStatus] = useState<{ exists: boolean; path?: string; size?: number } | null>(null)
-  const [isLlamaDownloading, setIsLlamaDownloading] = useState(false)
-  const [llamaDownloadProgress, setLlamaDownloadProgress] = useState(0)
-  const [llamaProgressData, setLlamaProgressData] = useState<{ downloaded: number; total: number; speed: number }>({ downloaded: 0, total: 0, speed: 0 })
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -328,8 +332,7 @@ function SettingsPage() {
 
       if (savedWhisperModelDir) setWhisperModelDir(savedWhisperModelDir)
 
-      // Load Llama status after config
-      void checkLlamaModelStatus()
+
     } catch (e: any) {
       console.error('加载配置失败:', e)
     }
@@ -645,7 +648,6 @@ function SettingsPage() {
         setWhisperModelDir(dir)
         await configService.setWhisperModelDir(dir)
         showMessage('已选择 Whisper 模型目录', true)
-        await checkLlamaModelStatus()
       }
     } catch (e: any) {
       showMessage('选择目录失败', false)
@@ -681,68 +683,6 @@ function SettingsPage() {
   const handleResetWhisperModelDir = async () => {
     setWhisperModelDir('')
     await configService.setWhisperModelDir('')
-    await checkLlamaModelStatus()
-  }
-
-  const checkLlamaModelStatus = async () => {
-    try {
-      // @ts-ignore
-      const modelsPath = await window.electronAPI.llama?.getModelsPath()
-      if (!modelsPath) return
-      const modelName = "Qwen3-4B-Q4_K_M.gguf" // Hardcoded preset for now
-      const fullPath = `${modelsPath}\\${modelName}`
-      // @ts-ignore
-      const status = await window.electronAPI.llama?.getModelStatus(fullPath)
-      if (status) {
-        setLlamaModelStatus({
-          exists: status.exists,
-          path: status.path,
-          size: status.size
-        })
-      }
-    } catch (e) {
-      console.error("Check llama model status failed", e)
-    }
-  }
-
-  useEffect(() => {
-    const handleLlamaProgress = (payload: { downloaded: number; total: number; speed: number }) => {
-      setLlamaProgressData(payload)
-      if (payload.total > 0) {
-        setLlamaDownloadProgress((payload.downloaded / payload.total) * 100)
-      }
-    }
-    // @ts-ignore
-    const removeListener = window.electronAPI.llama?.onDownloadProgress(handleLlamaProgress)
-    return () => {
-      if (typeof removeListener === 'function') removeListener()
-    }
-  }, [])
-
-  const handleDownloadLlamaModel = async () => {
-    if (isLlamaDownloading) return
-    setIsLlamaDownloading(true)
-    setLlamaDownloadProgress(0)
-    try {
-      const modelUrl = "https://www.modelscope.cn/models/Qwen/Qwen3-4B-GGUF/resolve/master/Qwen3-4B-Q4_K_M.gguf"
-      // @ts-ignore
-      const modelsPath = await window.electronAPI.llama?.getModelsPath()
-      const modelName = "Qwen3-4B-Q4_K_M.gguf"
-      const fullPath = `${modelsPath}\\${modelName}`
-
-      // @ts-ignore
-      const result = await window.electronAPI.llama?.downloadModel(modelUrl, fullPath)
-      if (result?.success) {
-        showMessage('Qwen3 模型下载完成', true)
-        await checkLlamaModelStatus()
-      } else {
-        showMessage(`模型下载失败: ${result?.error || '未知错误'}`, false)
-      }
-    } catch (e: any) {
-      showMessage(`模型下载失败: ${e}`, false)
-    } finally {
-      setIsLlamaDownloading(false)
-    }
   }
 
   const handleAutoGetDbKey = async () => {
@@ -993,11 +933,14 @@ function SettingsPage() {
         <button className={`mode-btn ${themeMode === 'dark' ? 'active' : ''}`} onClick={() => setThemeMode('dark')}>
           <Moon size={16} /> 深色
         </button>
+        <button className={`mode-btn ${themeMode === 'system' ? 'active' : ''}`} onClick={() => setThemeMode('system')}>
+          <Monitor size={16} /> 跟随系统
+        </button>
       </div>
       <div className="theme-grid">
         {themes.map((theme) => (
           <div key={theme.id} className={`theme-card ${currentTheme === theme.id ? 'active' : ''}`} onClick={() => setTheme(theme.id)}>
-            <div className="theme-preview" style={{ background: themeMode === 'dark' ? 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)' : `linear-gradient(135deg, ${theme.bgColor} 0%, ${theme.bgColor}dd 100%)` }}>
+            <div className="theme-preview" style={{ background: effectiveMode === 'dark' ? 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)' : `linear-gradient(135deg, ${theme.bgColor} 0%, ${theme.bgColor}dd 100%)` }}>
               <div className="theme-accent" style={{ background: theme.primaryColor }} />
             </div>
             <div className="theme-info">
@@ -1441,7 +1384,7 @@ function SettingsPage() {
     <div className="tab-content">
       <div className="form-group">
         <label>模型管理</label>
-        <span className="form-hint">管理语音识别和 AI 对话模型</span>
+        <span className="form-hint">管理语音识别模型</span>
       </div>
 
       <div className="form-group">
@@ -1505,50 +1448,6 @@ function SettingsPage() {
                 <button className="btn-icon danger" onClick={handleResetWhisperModelDir} title="重置为默认">
                   <RotateCcw size={18} />
                 </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>AI 对话模型 (Llama)</label>
-        <span className="form-hint">用于 AI 助手对话功能</span>
-        <div className="setting-control vertical has-border">
-          <div className="model-status-card">
-            <div className="model-info">
-              <div className="model-name">Qwen3 4B (Preset) (~2.6GB)</div>
-              <div className="model-path">
-                {llamaModelStatus?.exists ? (
-                  <span className="status-indicator success"><Check size={14} /> 已安装</span>
-                ) : (
-                  <span className="status-indicator warning">未安装</span>
-                )}
-                {llamaModelStatus?.path && <div className="path-text" title={llamaModelStatus.path}>{llamaModelStatus.path}</div>}
-              </div>
-            </div>
-            <div className="model-actions">
-              {!llamaModelStatus?.exists && !isLlamaDownloading && (
-                <button
-                  className="btn-download"
-                  onClick={handleDownloadLlamaModel}
-                >
-                  <Download size={16} /> 下载模型
-                </button>
-              )}
-              {isLlamaDownloading && (
-                <div className="download-status">
-                  <div className="status-header">
-                    <span className="percent">{Math.floor(llamaDownloadProgress)}%</span>
-                    <span className="metrics">
-                      {formatBytes(llamaProgressData.downloaded)} / {formatBytes(llamaProgressData.total)}
-                      <span className="speed">({formatBytes(llamaProgressData.speed)}/s)</span>
-                    </span>
-                  </div>
-                  <div className="progress-bar-mini">
-                    <div className="fill" style={{ width: `${llamaDownloadProgress}%` }}></div>
-                  </div>
-                </div>
               )}
             </div>
           </div>

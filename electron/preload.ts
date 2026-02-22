@@ -276,6 +276,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sns: {
     getTimeline: (limit: number, offset: number, usernames?: string[], keyword?: string, startTime?: number, endTime?: number) =>
       ipcRenderer.invoke('sns:getTimeline', limit, offset, usernames, keyword, startTime, endTime),
+    getSnsUsernames: () => ipcRenderer.invoke('sns:getSnsUsernames'),
     debugResource: (url: string) => ipcRenderer.invoke('sns:debugResource', url),
     proxyImage: (payload: { url: string; key?: string | number }) => ipcRenderer.invoke('sns:proxyImage', payload),
     downloadImage: (payload: { url: string; key?: string | number }) => ipcRenderer.invoke('sns:downloadImage', payload),
@@ -285,27 +286,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeAllListeners('sns:exportProgress')
     },
     selectExportDir: () => ipcRenderer.invoke('sns:selectExportDir')
-  },
-
-  // Llama AI
-  llama: {
-    loadModel: (modelPath: string) => ipcRenderer.invoke('llama:loadModel', modelPath),
-    createSession: (systemPrompt?: string) => ipcRenderer.invoke('llama:createSession', systemPrompt),
-    chat: (message: string, options?: any) => ipcRenderer.invoke('llama:chat', message, options),
-    downloadModel: (url: string, savePath: string) => ipcRenderer.invoke('llama:downloadModel', url, savePath),
-    getModelsPath: () => ipcRenderer.invoke('llama:getModelsPath'),
-    checkFileExists: (filePath: string) => ipcRenderer.invoke('llama:checkFileExists', filePath),
-    getModelStatus: (modelPath: string) => ipcRenderer.invoke('llama:getModelStatus', modelPath),
-    onToken: (callback: (token: string) => void) => {
-      const listener = (_: any, token: string) => callback(token)
-      ipcRenderer.on('llama:token', listener)
-      return () => ipcRenderer.removeListener('llama:token', listener)
-    },
-    onDownloadProgress: (callback: (payload: { downloaded: number; total: number; speed: number }) => void) => {
-      const listener = (_: any, payload: { downloaded: number; total: number; speed: number }) => callback(payload)
-      ipcRenderer.on('llama:downloadProgress', listener)
-      return () => ipcRenderer.removeListener('llama:downloadProgress', listener)
-    }
   },
 
   // HTTP API 服务

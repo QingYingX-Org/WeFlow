@@ -147,6 +147,18 @@ class SnsService {
         return join(this.getSnsCacheDir(), `${hash}${ext}`)
     }
 
+    // 获取所有发过朋友圈的用户名列表
+    async getSnsUsernames(): Promise<{ success: boolean; usernames?: string[]; error?: string }> {
+        const result = await wcdbService.execQuery('sns', null, 'SELECT DISTINCT user_name FROM SnsTimeLine')
+        if (!result.success || !result.rows) {
+            // 尝试 userName 列名
+            const result2 = await wcdbService.execQuery('sns', null, 'SELECT DISTINCT userName FROM SnsTimeLine')
+            if (!result2.success || !result2.rows) return { success: false, error: result.error || result2.error }
+            return { success: true, usernames: result2.rows.map((r: any) => r.userName).filter(Boolean) }
+        }
+        return { success: true, usernames: result.rows.map((r: any) => r.user_name).filter(Boolean) }
+    }
+
     async getTimeline(limit: number = 20, offset: number = 0, usernames?: string[], keyword?: string, startTime?: number, endTime?: number): Promise<{ success: boolean; timeline?: SnsPost[]; error?: string }> {
         const result = await wcdbService.getSnsTimeline(limit, offset, usernames, keyword, startTime, endTime)
 

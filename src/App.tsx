@@ -22,10 +22,9 @@ import SnsPage from './pages/SnsPage'
 import ContactsPage from './pages/ContactsPage'
 import ChatHistoryPage from './pages/ChatHistoryPage'
 import NotificationWindow from './pages/NotificationWindow'
-import AIChatPage from './pages/AIChatPage'
 
 import { useAppStore } from './stores/appStore'
-import { themes, useThemeStore, type ThemeId } from './stores/themeStore'
+import { themes, useThemeStore, type ThemeId, type ThemeMode } from './stores/themeStore'
 import * as configService from './services/config'
 import { Download, X, Shield } from 'lucide-react'
 import './App.scss'
@@ -101,14 +100,27 @@ function App() {
 
   // 应用主题
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', currentTheme)
-    document.documentElement.setAttribute('data-mode', themeMode)
-
-    // 更新窗口控件颜色以适配主题
-    const symbolColor = themeMode === 'dark' ? '#ffffff' : '#1a1a1a'
-    if (!isOnboardingWindow && !isNotificationWindow) {
-      window.electronAPI.window.setTitleBarOverlay({ symbolColor })
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyMode = (mode: ThemeMode, systemDark?: boolean) => {
+      const effectiveMode = mode === 'system' ? (systemDark ?? mq.matches ? 'dark' : 'light') : mode
+      document.documentElement.setAttribute('data-theme', currentTheme)
+      document.documentElement.setAttribute('data-mode', effectiveMode)
+      const symbolColor = effectiveMode === 'dark' ? '#ffffff' : '#1a1a1a'
+      if (!isOnboardingWindow && !isNotificationWindow) {
+        window.electronAPI.window.setTitleBarOverlay({ symbolColor })
+      }
     }
+
+    applyMode(themeMode)
+
+    // 监听系统主题变化
+    const handler = (e: MediaQueryListEvent) => {
+      if (useThemeStore.getState().themeMode === 'system') {
+        applyMode('system', e.matches)
+      }
+    }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
   }, [currentTheme, themeMode, isOnboardingWindow, isNotificationWindow])
 
   // 读取已保存的主题设置
@@ -122,7 +134,7 @@ function App() {
         if (savedThemeId && themes.some((theme) => theme.id === savedThemeId)) {
           setTheme(savedThemeId as ThemeId)
         }
-        if (savedThemeMode === 'light' || savedThemeMode === 'dark') {
+        if (savedThemeMode === 'light' || savedThemeMode === 'dark' || savedThemeMode === 'system') {
           setThemeMode(savedThemeMode)
         }
       } catch (e) {
@@ -182,10 +194,12 @@ function App() {
     if (isNotificationWindow) return // Skip updates in notification window
 
     const removeUpdateListener = window.electronAPI?.app?.onUpdateAvailable?.((info: any) => {
-      // 发现新版本时自动打开更新弹窗
+      // 发现新版本时保存更新信息，锁定状态下不弹窗，解锁后再显示
       if (info) {
         setUpdateInfo({ ...info, hasUpdate: true })
-        setShowUpdateDialog(true)
+        if (!useAppStore.getState().isLocked) {
+          setShowUpdateDialog(true)
+        }
       }
     })
     const removeProgressListener = window.electronAPI?.app?.onDownloadProgress?.((progress: any) => {
@@ -196,6 +210,13 @@ function App() {
       removeProgressListener?.()
     }
   }, [setUpdateInfo, setDownloadProgress, setShowUpdateDialog, isNotificationWindow])
+
+  // 解锁后显示暂存的更新弹窗
+  useEffect(() => {
+    if (!isLocked && updateInfo?.hasUpdate && !showUpdateDialog && !isDownloading) {
+      setShowUpdateDialog(true)
+    }
+  }, [isLocked])
 
   const handleUpdateNow = async () => {
     setShowUpdateDialog(false)
@@ -435,7 +456,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/home" element={<HomePage />} />
               <Route path="/chat" element={<ChatPage />} />
-              <Route path="/ai-chat" element={<AIChatPage />} />
+
               <Route path="/analytics" element={<AnalyticsWelcomePage />} />
               <Route path="/analytics/view" element={<AnalyticsPage />} />
               <Route path="/group-analytics" element={<GroupAnalyticsPage />} />

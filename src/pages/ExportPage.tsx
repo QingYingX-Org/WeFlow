@@ -53,6 +53,7 @@ function ExportPage() {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [calendarDate, setCalendarDate] = useState(new Date())
   const [selectingStart, setSelectingStart] = useState(true)
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false)
   const [showMediaLayoutPrompt, setShowMediaLayoutPrompt] = useState(false)
   const [showDisplayNameSelect, setShowDisplayNameSelect] = useState(false)
   const [showPreExportDialog, setShowPreExportDialog] = useState(false)
@@ -1047,7 +1048,7 @@ function ExportPage() {
 
       {/* 日期选择弹窗 */}
       {showDatePicker && (
-        <div className="export-overlay" onClick={() => setShowDatePicker(false)}>
+        <div className="export-overlay" onClick={() => { setShowDatePicker(false); setShowYearMonthPicker(false) }}>
           <div className="date-picker-modal" onClick={e => e.stopPropagation()}>
             <h3>选择时间范围</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '8px 0 16px 0' }}>
@@ -1122,7 +1123,7 @@ function ExportPage() {
                 >
                   <ChevronLeft size={18} />
                 </button>
-                <span className="calendar-month">
+                <span className="calendar-month clickable" onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}>
                   {calendarDate.getFullYear()}年{calendarDate.getMonth() + 1}月
                 </span>
                 <button
@@ -1132,6 +1133,32 @@ function ExportPage() {
                   <ChevronRight size={18} />
                 </button>
               </div>
+              {showYearMonthPicker ? (
+                <div className="year-month-picker">
+                  <div className="year-selector">
+                    <button className="calendar-nav-btn" onClick={() => setCalendarDate(new Date(calendarDate.getFullYear() - 1, calendarDate.getMonth(), 1))}>
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="year-label">{calendarDate.getFullYear()}年</span>
+                    <button className="calendar-nav-btn" onClick={() => setCalendarDate(new Date(calendarDate.getFullYear() + 1, calendarDate.getMonth(), 1))}>
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                  <div className="month-grid">
+                    {['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'].map((name, i) => (
+                      <button
+                        key={i}
+                        className={`month-btn ${i === calendarDate.getMonth() ? 'active' : ''}`}
+                        onClick={() => {
+                          setCalendarDate(new Date(calendarDate.getFullYear(), i, 1))
+                          setShowYearMonthPicker(false)
+                        }}
+                      >{name}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="calendar-weekdays">
                 {['日', '一', '二', '三', '四', '五', '六'].map(day => (
                   <div key={day} className="calendar-weekday">{day}</div>
@@ -1163,12 +1190,14 @@ function ExportPage() {
                   )
                 })}
               </div>
+                </>
+              )}
             </div>
             <div className="date-picker-actions">
-              <button className="cancel-btn" onClick={() => setShowDatePicker(false)}>
+              <button className="cancel-btn" onClick={() => { setShowDatePicker(false); setShowYearMonthPicker(false) }}>
                 取消
               </button>
-              <button className="confirm-btn" onClick={() => setShowDatePicker(false)}>
+              <button className="confirm-btn" onClick={() => { setShowDatePicker(false); setShowYearMonthPicker(false) }}>
                 确定
               </button>
             </div>

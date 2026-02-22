@@ -138,7 +138,7 @@ export const SnsFilterPanel: React.FC<SnsFilterPanelProps> = ({
                         />
                         <Search size={14} className="search-icon" />
                         {contactSearch && (
-                            <X size={14} className="clear-icon" onClick={() => setContactSearch('')} style={{ right: 8, top: 8, position: 'absolute', cursor: 'pointer', color: 'var(--text-tertiary)' }} />
+                            <X size={14} className="clear-icon" onClick={() => setContactSearch('')} />
                         )}
                     </div>
 

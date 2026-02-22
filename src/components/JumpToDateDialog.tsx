@@ -24,6 +24,7 @@ const JumpToDateDialog: React.FC<JumpToDateDialogProps> = ({
     const isValidDate = (d: any) => d instanceof Date && !isNaN(d.getTime())
     const [calendarDate, setCalendarDate] = useState(isValidDate(currentDate) ? new Date(currentDate) : new Date())
     const [selectedDate, setSelectedDate] = useState(new Date(currentDate))
+    const [showYearMonthPicker, setShowYearMonthPicker] = useState(false)
 
     if (!isOpen) return null
 
@@ -137,7 +138,7 @@ const JumpToDateDialog: React.FC<JumpToDateDialogProps> = ({
                         >
                             <ChevronLeft size={18} />
                         </button>
-                        <span className="current-month">
+                        <span className="current-month clickable" onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}>
                             {calendarDate.getFullYear()}年{calendarDate.getMonth() + 1}月
                         </span>
                         <button
@@ -148,6 +149,31 @@ const JumpToDateDialog: React.FC<JumpToDateDialogProps> = ({
                         </button>
                     </div>
 
+                    {showYearMonthPicker ? (
+                        <div className="year-month-picker">
+                            <div className="year-selector">
+                                <button className="nav-btn" onClick={() => setCalendarDate(new Date(calendarDate.getFullYear() - 1, calendarDate.getMonth(), 1))}>
+                                    <ChevronLeft size={16} />
+                                </button>
+                                <span className="year-label">{calendarDate.getFullYear()}年</span>
+                                <button className="nav-btn" onClick={() => setCalendarDate(new Date(calendarDate.getFullYear() + 1, calendarDate.getMonth(), 1))}>
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                            <div className="month-grid">
+                                {['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'].map((name, i) => (
+                                    <button
+                                        key={i}
+                                        className={`month-btn ${i === calendarDate.getMonth() ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setCalendarDate(new Date(calendarDate.getFullYear(), i, 1))
+                                            setShowYearMonthPicker(false)
+                                        }}
+                                    >{name}</button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
                     <div className={`calendar-grid ${loadingDates ? 'loading' : ''}`}>
                         {loadingDates && (
                             <div className="calendar-loading">
@@ -174,6 +200,7 @@ const JumpToDateDialog: React.FC<JumpToDateDialogProps> = ({
                             ))}
                         </div>
                     </div>
+                    )}
                 </div>
 
                 <div className="quick-options">

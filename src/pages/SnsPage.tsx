@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react'
 import { RefreshCw, Search, X, Download, FolderOpen, FileJson, FileText, Image, CheckCircle, AlertCircle, Calendar, Users, Info, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ImagePreview } from '../components/ImagePreview'
 import JumpToDateDialog from '../components/JumpToDateDialog'
@@ -11,6 +11,7 @@ interface Contact {
     username: string
     displayName: string
     avatarUrl?: string
+    type?: 'friend' | 'former_friend' | 'sns_only'
 }
 
 export default function SnsPage() {
@@ -45,28 +46,29 @@ export default function SnsPage() {
     const [exportResult, setExportResult] = useState<{ success: boolean; filePath?: string; postCount?: number; mediaCount?: number; error?: string } | null>(null)
     const [refreshSpin, setRefreshSpin] = useState(false)
     const [calendarPicker, setCalendarPicker] = useState<{ field: 'start' | 'end'; month: Date } | null>(null)
+    const [showYearMonthPicker, setShowYearMonthPicker] = useState(false)
 
     const postsContainerRef = useRef<HTMLDivElement>(null)
     const [hasNewer, setHasNewer] = useState(false)
     const [loadingNewer, setLoadingNewer] = useState(false)
     const postsRef = useRef<SnsPost[]>([])
-    const scrollAdjustmentRef = useRef<number>(0)
+    const scrollAdjustmentRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
 
     // Sync posts ref
     useEffect(() => {
         postsRef.current = posts
     }, [posts])
 
-    // Maintain scroll position when loading newer posts
-    useEffect(() => {
-        if (scrollAdjustmentRef.current !== 0 && postsContainerRef.current) {
+    // 在 DOM 更新后、浏览器绘制前同步调整滚动位置，防止向上加载时页面跳动
+    useLayoutEffect(() => {
+        const snapshot = scrollAdjustmentRef.current;
+        if (snapshot && postsContainerRef.current) {
             const container = postsContainerRef.current;
-            const newHeight = container.scrollHeight;
-            const diff = newHeight - scrollAdjustmentRef.current;
-            if (diff > 0) {
-                container.scrollTop += diff;
+            const addedHeight = container.scrollHeight - snapshot.scrollHeight;
+            if (addedHeight > 0) {
+                container.scrollTop = snapshot.scrollTop + addedHeight;
             }
-            scrollAdjustmentRef.current = 0;
+            scrollAdjustmentRef.current = null;
         }
     }, [posts])
 
@@ -104,14 +106,17 @@ export default function SnsPage() {
 
                     if (result.success && result.timeline && result.timeline.length > 0) {
                         if (postsContainerRef.current) {
-                            scrollAdjustmentRef.current = postsContainerRef.current.scrollHeight;
+                            scrollAdjustmentRef.current = {
+                                scrollHeight: postsContainerRef.current.scrollHeight,
+                                scrollTop: postsContainerRef.current.scrollTop
+                            };
                         }
 
                         const existingIds = new Set(currentPosts.map((p: SnsPost) => p.id));
                         const uniqueNewer = result.timeline.filter((p: SnsPost) => !existingIds.has(p.id));
 
                         if (uniqueNewer.length > 0) {
-                            setPosts(prev => [...uniqueNewer, ...prev]);
+                            setPosts(prev => [...uniqueNewer, ...prev].sort((a, b) => b.createTime - a.createTime));
                         }
                         setHasNewer(result.timeline.length >= limit);
                     } else {
@@ -157,7 +162,7 @@ export default function SnsPage() {
                     }
                 } else {
                     if (result.timeline.length > 0) {
-                        setPosts(prev => [...prev, ...result.timeline!])
+                        setPosts(prev => [...prev, ...result.timeline!].sort((a, b) => b.createTime - a.createTime))
                     }
                     if (result.timeline.length < limit) {
                         setHasMore(false)
@@ -173,45 +178,59 @@ export default function SnsPage() {
         }
     }, [selectedUsernames, searchKeyword, jumpTargetDate])
 
-    // Load Contacts
+    // Load Contacts（合并好友+曾经好友+朋友圈发布者，enrichSessionsContactInfo 补充头像）
     const loadContacts = useCallback(async () => {
         setContactsLoading(true)
         try {
-            const result = await window.electronAPI.chat.getSessions()
-            if (result.success && result.sessions) {
-                const systemAccounts = ['filehelper', 'fmessage', 'newsapp', 'weixin', 'qqmail', 'tmessage', 'floatbottle', 'medianote', 'brandsessionholder'];
-                const initialContacts = result.sessions
-                    .filter((s: any) => {
-                        if (!s.username) return false;
-                        const u = s.username.toLowerCase();
-                        if (u.includes('@chatroom') || u.endsWith('@chatroom') || u.endsWith('@openim')) return false;
-                        if (u.startsWith('gh_')) return false;
-                        if (systemAccounts.includes(u) || u.includes('helper') || u.includes('sessionholder')) return false;
-                        return true;
-                    })
-                    .map((s: any) => ({
-                        username: s.username,
-                        displayName: s.displayName || s.username,
-                        avatarUrl: s.avatarUrl
-                    }))
-                setContacts(initialContacts)
+            // 并行获取联系人列表和朋友圈发布者列表
+            const [contactsResult, snsResult] = await Promise.all([
+                window.electronAPI.chat.getContacts(),
+                window.electronAPI.sns.getSnsUsernames()
+            ])
 
-                const usernames = initialContacts.map((c: { username: string }) => c.username)
-                const enriched = await window.electronAPI.chat.enrichSessionsContactInfo(usernames)
-                if (enriched.success && enriched.contacts) {
-                    setContacts(prev => prev.map(c => {
-                        const extra = enriched.contacts![c.username]
-                        if (extra) {
-                            return {
-                                ...c,
-                                displayName: extra.displayName || c.displayName,
-                                avatarUrl: extra.avatarUrl || c.avatarUrl
-                            }
-                        }
-                        return c
-                    }))
+            // 以联系人为基础，按 username 去重
+            const contactMap = new Map<string, Contact>()
+
+            // 好友和曾经的好友
+            if (contactsResult.success && contactsResult.contacts) {
+                for (const c of contactsResult.contacts) {
+                    if (c.type === 'friend' || c.type === 'former_friend') {
+                        contactMap.set(c.username, {
+                            username: c.username,
+                            displayName: c.displayName,
+                            avatarUrl: c.avatarUrl,
+                            type: c.type === 'former_friend' ? 'former_friend' : 'friend'
+                        })
+                    }
                 }
             }
+
+            // 朋友圈发布者（补充不在联系人列表中的用户）
+            if (snsResult.success && snsResult.usernames) {
+                for (const u of snsResult.usernames) {
+                    if (!contactMap.has(u)) {
+                        contactMap.set(u, { username: u, displayName: u, type: 'sns_only' })
+                    }
+                }
+            }
+
+            const allUsernames = Array.from(contactMap.keys())
+
+            // 用 enrichSessionsContactInfo 统一补充头像和显示名
+            if (allUsernames.length > 0) {
+                const enriched = await window.electronAPI.chat.enrichSessionsContactInfo(allUsernames)
+                if (enriched.success && enriched.contacts) {
+                    for (const [username, extra] of Object.entries(enriched.contacts) as [string, { displayName?: string; avatarUrl?: string }][]) {
+                        const c = contactMap.get(username)
+                        if (c) {
+                            c.displayName = extra.displayName || c.displayName
+                            c.avatarUrl = extra.avatarUrl || c.avatarUrl
+                        }
+                    }
+                }
+            }
+
+            setContacts(Array.from(contactMap.values()))
         } catch (error) {
             console.error('Failed to load contacts:', error)
         } finally {
@@ -336,7 +355,12 @@ export default function SnsPage() {
                     )}
 
                     {!hasMore && posts.length > 0 && (
-                        <div className="status-indicator no-more">已经到底啦</div>
+                        <div className="status-indicator no-more">{
+                            selectedUsernames.length === 1 &&
+                            contacts.find(c => c.username === selectedUsernames[0])?.type === 'former_friend'
+                                ? '在时间的长河里刻舟求剑'
+                                : '或许过往已无可溯洄，但好在还有可以与你相遇的明天'
+                        }</div>
                     )}
 
                     {!loading && posts.length === 0 && (
@@ -655,14 +679,14 @@ export default function SnsPage() {
 
             {/* 日期选择弹窗 */}
             {calendarPicker && (
-                <div className="calendar-overlay" onClick={() => setCalendarPicker(null)}>
+                <div className="calendar-overlay" onClick={() => { setCalendarPicker(null); setShowYearMonthPicker(false) }}>
                     <div className="calendar-modal" onClick={e => e.stopPropagation()}>
                         <div className="calendar-header">
                             <div className="title-area">
                                 <Calendar size={18} />
                                 <h3>选择{calendarPicker.field === 'start' ? '开始' : '结束'}日期</h3>
                             </div>
-                            <button className="close-btn" onClick={() => setCalendarPicker(null)}>
+                            <button className="close-btn" onClick={() => { setCalendarPicker(null); setShowYearMonthPicker(false) }}>
                                 <X size={18} />
                             </button>
                         </div>
@@ -671,13 +695,39 @@ export default function SnsPage() {
                                 <button className="nav-btn" onClick={() => setCalendarPicker(prev => prev ? { ...prev, month: new Date(prev.month.getFullYear(), prev.month.getMonth() - 1, 1) } : null)}>
                                     <ChevronLeft size={18} />
                                 </button>
-                                <span className="current-month">
+                                <span className="current-month clickable" onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}>
                                     {calendarPicker.month.getFullYear()}年{calendarPicker.month.getMonth() + 1}月
                                 </span>
                                 <button className="nav-btn" onClick={() => setCalendarPicker(prev => prev ? { ...prev, month: new Date(prev.month.getFullYear(), prev.month.getMonth() + 1, 1) } : null)}>
                                     <ChevronRight size={18} />
                                 </button>
                             </div>
+                            {showYearMonthPicker ? (
+                                <div className="year-month-picker">
+                                    <div className="year-selector">
+                                        <button className="nav-btn" onClick={() => setCalendarPicker(prev => prev ? { ...prev, month: new Date(prev.month.getFullYear() - 1, prev.month.getMonth(), 1) } : null)}>
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <span className="year-label">{calendarPicker.month.getFullYear()}年</span>
+                                        <button className="nav-btn" onClick={() => setCalendarPicker(prev => prev ? { ...prev, month: new Date(prev.month.getFullYear() + 1, prev.month.getMonth(), 1) } : null)}>
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    </div>
+                                    <div className="month-grid">
+                                        {['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'].map((name, i) => (
+                                            <button
+                                                key={i}
+                                                className={`month-btn ${i === calendarPicker.month.getMonth() ? 'active' : ''}`}
+                                                onClick={() => {
+                                                    setCalendarPicker(prev => prev ? { ...prev, month: new Date(prev.month.getFullYear(), i, 1) } : null)
+                                                    setShowYearMonthPicker(false)
+                                                }}
+                                            >{name}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                              <>
                             <div className="calendar-weekdays">
                                 {['日', '一', '二', '三', '四', '五', '六'].map(d => <div key={d} className="weekday">{d}</div>)}
                             </div>
@@ -710,6 +760,8 @@ export default function SnsPage() {
                                     })
                                 })()}
                             </div>
+                              </>
+                            )}
                         </div>
                         <div className="quick-options">
                             <button onClick={() => {
@@ -733,7 +785,7 @@ export default function SnsPage() {
                             }}>{calendarPicker.field === 'start' ? '三个月前' : '一个月前'}</button>
                         </div>
                         <div className="dialog-footer">
-                            <button className="cancel-btn" onClick={() => setCalendarPicker(null)}>取消</button>
+                            <button className="cancel-btn" onClick={() => { setCalendarPicker(null); setShowYearMonthPicker(false) }}>取消</button>
                         </div>
                     </div>
                 </div>

@@ -26,6 +26,7 @@ function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChang
   const [isOpen, setIsOpen] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectingStart, setSelectingStart] = useState(true)
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 点击外部关闭
@@ -185,12 +186,38 @@ function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChang
               <button className="nav-btn" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}>
                 <ChevronLeft size={16} />
               </button>
-              <span className="month-year">{currentMonth.getFullYear()}年 {MONTH_NAMES[currentMonth.getMonth()]}</span>
+              <span className="month-year clickable" onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}>
+                {currentMonth.getFullYear()}年 {MONTH_NAMES[currentMonth.getMonth()]}
+              </span>
               <button className="nav-btn" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}>
                 <ChevronRight size={16} />
               </button>
             </div>
-            {renderCalendar()}
+            {showYearMonthPicker ? (
+              <div className="year-month-picker">
+                <div className="year-selector">
+                  <button className="nav-btn" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear() - 1, currentMonth.getMonth()))}>
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="year-label">{currentMonth.getFullYear()}年</span>
+                  <button className="nav-btn" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear() + 1, currentMonth.getMonth()))}>
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+                <div className="month-grid">
+                  {MONTH_NAMES.map((name, i) => (
+                    <button
+                      key={i}
+                      className={`month-btn ${i === currentMonth.getMonth() ? 'active' : ''}`}
+                      onClick={() => {
+                        setCurrentMonth(new Date(currentMonth.getFullYear(), i))
+                        setShowYearMonthPicker(false)
+                      }}
+                    >{name}</button>
+                  ))}
+                </div>
+              </div>
+            ) : renderCalendar()}
             <div className="selection-hint">
               {selectingStart ? '请选择开始日期' : '请选择结束日期'}
             </div>
