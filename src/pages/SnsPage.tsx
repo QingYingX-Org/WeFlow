@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { RefreshCw, Search, X, Download, FolderOpen, FileJson, FileText, Image, CheckCircle, AlertCircle, Calendar, Users, Info, ChevronLeft, ChevronRight, Shield, ShieldOff } from 'lucide-react'
 import JumpToDateDialog from '../components/JumpToDateDialog'
 import './SnsPage.scss'
@@ -21,10 +21,19 @@ interface Contact {
     username: string
     displayName: string
     avatarUrl?: string
+    remark?: string
+    nickname?: string
     type?: 'friend' | 'former_friend' | 'sns_only'
     lastSessionTimestamp?: number
     postCount?: number
     postCountStatus?: ContactPostCountStatus
+}
+
+interface SidebarUserProfile {
+    wxid: string
+    displayName: string
+    alias?: string
+    avatarUrl?: string
 }
 
 interface ContactsCountProgress {
@@ -42,6 +51,38 @@ interface SnsOverviewStats {
 }
 
 type OverviewStatsStatus = 'loading' | 'ready' | 'error'
+
+const SIDEBAR_USER_PROFILE_CACHE_KEY = 'sidebar_user_profile_cache_v1'
+
+const readSidebarUserProfileCache = (): SidebarUserProfile | null => {
+    try {
+        const raw = window.localStorage.getItem(SIDEBAR_USER_PROFILE_CACHE_KEY)
+        if (!raw) return null
+        const parsed = JSON.parse(raw) as SidebarUserProfile
+        if (!parsed || typeof parsed !== 'object') return null
+        return {
+            wxid: String(parsed.wxid || '').trim(),
+            displayName: String(parsed.displayName || '').trim(),
+            alias: parsed.alias ? String(parsed.alias).trim() : undefined,
+            avatarUrl: parsed.avatarUrl ? String(parsed.avatarUrl).trim() : undefined
+        }
+    } catch {
+        return null
+    }
+}
+
+const normalizeAccountId = (value?: string | null): string => {
+    const trimmed = String(value || '').trim()
+    if (!trimmed) return ''
+    if (trimmed.toLowerCase().startsWith('wxid_')) {
+        const match = trimmed.match(/^(wxid_[^_]+)/i)
+        return (match?.[1] || trimmed).toLowerCase()
+    }
+    const suffixMatch = trimmed.match(/^(.+)_([a-zA-Z0-9]{4})$/)
+    return (suffixMatch ? suffixMatch[1] : trimmed).toLowerCase()
+}
+
+const normalizeNameForCompare = (value?: string | null): string => String(value || '').trim().toLowerCase()
 
 export default function SnsPage() {
     const [posts, setPosts] = useState<SnsPost[]>([])
@@ -70,6 +111,10 @@ export default function SnsPage() {
         resolved: 0,
         total: 0,
         running: false
+    })
+    const [currentUserProfile, setCurrentUserProfile] = useState<SidebarUserProfile>(() => readSidebarUserProfileCache() || {
+        wxid: '',
+        displayName: ''
     })
 
     // UI states
@@ -196,6 +241,61 @@ export default function SnsPage() {
     const sortContactsForRanking = useCallback((input: Contact[]): Contact[] => {
         return [...input].sort(compareContactsForRanking)
     }, [compareContactsForRanking])
+
+    const resolvedCurrentUserContact = useMemo(() => {
+        const normalizedWxid = normalizeAccountId(currentUserProfile.wxid)
+        const normalizedAlias = normalizeAccountId(currentUserProfile.alias)
+        const normalizedDisplayName = normalizeNameForCompare(currentUserProfile.displayName)
+
+        if (normalizedWxid) {
+            const exactByUsername = contacts.find((contact) => normalizeAccountId(contact.username) === normalizedWxid)
+            if (exactByUsername) return exactByUsername
+        }
+
+        if (normalizedAlias) {
+            const exactByAliasLikeName = contacts.find((contact) => {
+                const candidates = [contact.displayName, contact.remark, contact.nickname].map(normalizeNameForCompare)
+                return candidates.includes(normalizedAlias)
+            })
+            if (exactByAliasLikeName) return exactByAliasLikeName
+        }
+
+        if (!normalizedDisplayName) return null
+        return contacts.find((contact) => {
+            const candidates = [contact.displayName, contact.remark, contact.nickname].map(normalizeNameForCompare)
+            return candidates.includes(normalizedDisplayName)
+        }) || null
+    }, [contacts, currentUserProfile.alias, currentUserProfile.displayName, currentUserProfile.wxid])
+
+    const currentTimelineTargetContact = useMemo(() => {
+        const normalizedTargetUsername = String(authorTimelineTarget?.username || '').trim()
+        if (!normalizedTargetUsername) return null
+        return contacts.find((contact) => contact.username === normalizedTargetUsername) || null
+    }, [authorTimelineTarget, contacts])
+
+    const myTimelineCount = useMemo(() => {
+        if (typeof overviewStats.myPosts === 'number' && Number.isFinite(overviewStats.myPosts) && overviewStats.myPosts >= 0) {
+            return Math.floor(overviewStats.myPosts)
+        }
+        if (resolvedCurrentUserContact?.postCountStatus === 'ready' && typeof resolvedCurrentUserContact.postCount === 'number') {
+            return normalizePostCount(resolvedCurrentUserContact.postCount)
+        }
+        return null
+    }, [normalizePostCount, overviewStats.myPosts, resolvedCurrentUserContact])
+
+    const myTimelineCountLoading = Boolean(
+        overviewStatsStatus === 'loading'
+        || resolvedCurrentUserContact?.postCountStatus === 'loading'
+    )
+
+    const openCurrentUserTimeline = useCallback(() => {
+        if (!resolvedCurrentUserContact) return
+        setAuthorTimelineTarget({
+            username: resolvedCurrentUserContact.username,
+            displayName: resolvedCurrentUserContact.displayName || currentUserProfile.displayName || resolvedCurrentUserContact.username,
+            avatarUrl: resolvedCurrentUserContact.avatarUrl || currentUserProfile.avatarUrl
+        })
+    }, [currentUserProfile.avatarUrl, currentUserProfile.displayName, resolvedCurrentUserContact])
 
     const isDefaultViewNow = useCallback(() => {
         return selectedUsernamesRef.current.length === 0 && !searchKeywordRef.current.trim() && !jumpTargetDateRef.current
@@ -626,6 +726,8 @@ export default function SnsPage() {
                         username: contact.username,
                         displayName: contact.displayName || contact.username,
                         avatarUrl: cachedAvatarMap[contact.username]?.avatarUrl,
+                        remark: contact.remark,
+                        nickname: contact.nickname,
                         type: (contact.type === 'former_friend' ? 'former_friend' : 'friend') as 'friend' | 'former_friend',
                         lastSessionTimestamp: 0,
                         postCount: hasCachedCount ? Math.max(0, Math.floor(cachedCount)) : undefined,
@@ -677,6 +779,8 @@ export default function SnsPage() {
                             username: c.username,
                             displayName: c.displayName,
                             avatarUrl: c.avatarUrl,
+                            remark: c.remark,
+                            nickname: c.nickname,
                             type: c.type === 'former_friend' ? 'former_friend' : 'friend',
                             lastSessionTimestamp: Number(sessionTimestampMap.get(c.username) || 0),
                             postCount: hasCachedCount ? Math.max(0, Math.floor(cachedCount)) : undefined,
@@ -770,6 +874,39 @@ export default function SnsPage() {
     }, [hydrateSnsPageCache, loadContacts, loadOverviewStats])
 
     useEffect(() => {
+        const syncCurrentUserProfile = async () => {
+            const cachedProfile = readSidebarUserProfileCache()
+            if (cachedProfile) {
+                setCurrentUserProfile((prev) => ({
+                    wxid: cachedProfile.wxid || prev.wxid,
+                    displayName: cachedProfile.displayName || prev.displayName,
+                    alias: cachedProfile.alias || prev.alias,
+                    avatarUrl: cachedProfile.avatarUrl || prev.avatarUrl
+                }))
+            }
+
+            try {
+                const wxidRaw = await configService.getMyWxid()
+                const resolvedWxid = normalizeAccountId(wxidRaw) || String(wxidRaw || '').trim()
+                if (!resolvedWxid && !cachedProfile) return
+                setCurrentUserProfile((prev) => ({
+                    wxid: resolvedWxid || prev.wxid,
+                    displayName: prev.displayName || cachedProfile?.displayName || resolvedWxid || '未识别用户',
+                    alias: prev.alias || cachedProfile?.alias,
+                    avatarUrl: prev.avatarUrl || cachedProfile?.avatarUrl
+                }))
+            } catch (error) {
+                console.error('Failed to sync current sidebar user profile:', error)
+            }
+        }
+
+        void syncCurrentUserProfile()
+        const handleChange = () => { void syncCurrentUserProfile() }
+        window.addEventListener('wxid-changed', handleChange as EventListener)
+        return () => window.removeEventListener('wxid-changed', handleChange as EventListener)
+    }, [])
+
+    useEffect(() => {
         return () => {
             contactsCountHydrationTokenRef.current += 1
             if (contactsCountBatchTimerRef.current) {
@@ -829,6 +966,24 @@ export default function SnsPage() {
                     <div className="feed-header">
                         <div className="feed-header-main">
                             <h2>朋友圈</h2>
+                            <button
+                                type="button"
+                                className={`feed-my-timeline-entry ${resolvedCurrentUserContact ? 'ready' : ''} ${myTimelineCountLoading ? 'loading' : ''}`}
+                                onClick={openCurrentUserTimeline}
+                                disabled={!resolvedCurrentUserContact}
+                                title={resolvedCurrentUserContact
+                                    ? `打开${resolvedCurrentUserContact.displayName || '我'}的朋友圈详情`
+                                    : '未在右侧联系人列表中匹配到当前账号'}
+                            >
+                                <span className="feed-my-timeline-label">我的朋友圈</span>
+                                <span className="feed-my-timeline-count">
+                                    {myTimelineCount !== null
+                                        ? `${myTimelineCount.toLocaleString('zh-CN')} 条`
+                                        : myTimelineCountLoading
+                                            ? '...'
+                                            : '--'}
+                                </span>
+                            </button>
                             <div className={`feed-stats-line ${overviewStatsStatus}`}>
                                 {renderOverviewStats()}
                             </div>
@@ -985,6 +1140,14 @@ export default function SnsPage() {
             <ContactSnsTimelineDialog
                 target={authorTimelineTarget}
                 onClose={closeAuthorTimeline}
+                initialTotalPosts={authorTimelineTarget?.username === resolvedCurrentUserContact?.username
+                    ? myTimelineCount
+                    : currentTimelineTargetContact?.postCountStatus === 'ready'
+                        ? normalizePostCount(currentTimelineTargetContact.postCount)
+                        : null}
+                initialTotalPostsLoading={Boolean(authorTimelineTarget?.username === resolvedCurrentUserContact?.username
+                    ? myTimelineCount === null && myTimelineCountLoading
+                    : currentTimelineTargetContact?.postCountStatus === 'loading')}
                 isProtected={triggerInstalled === true}
                 onDeletePost={handlePostDelete}
             />
