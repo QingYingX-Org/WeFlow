@@ -74,23 +74,13 @@ export class KeyServiceMac {
     try {
       onStatus?.('正在获取数据库密钥...', 0)
       
-      // 调试：列出所有 WeChat 进程
-      const procsPtr = this.ListWeChatProcesses()
-      if (procsPtr) {
-        const procs = this.koffi.decode(procsPtr, 'char', -1)
-        this.FreeString(procsPtr)
-        onStatus?.(`找到进程: ${procs}`, 0)
-      } else {
-        onStatus?.('未找到 WeChat 相关进程', 2)
-      }
-      
       const keyPtr = this.GetDbKey()
       if (!keyPtr) {
-        onStatus?.('获取失败：WeChat 未运行或无法附加（可能需要授予调试权限）', 2)
+        onStatus?.('获取失败：WeChat 未运行或无法附加', 2)
         return { success: false, error: 'WeChat 未运行或无法附加' }
       }
 
-      const key = this.koffi.decode(keyPtr, 'char', -1)
+      const key = this.koffi.decode(keyPtr, 'string')
       this.FreeString(keyPtr)
 
       onStatus?.('密钥获取成功', 1)
@@ -222,7 +212,7 @@ export class KeyServiceMac {
     
     if (!aesKeyPtr) return null
     
-    const aesKey = this.koffi.decode(aesKeyPtr, 'char', -1)
+    const aesKey = this.koffi.decode(aesKeyPtr, 'string')
     this.FreeString(aesKeyPtr)
     
     return aesKey
