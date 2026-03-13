@@ -43,6 +43,26 @@ export class KeyServiceMac {
     throw new Error('xkey_helper not found')
   }
 
+  private getImageScanHelperPath(): string {
+    const isPackaged = app.isPackaged
+    const candidates: string[] = []
+
+    if (isPackaged) {
+      candidates.push(join(process.resourcesPath, 'resources', 'image_scan_helper'))
+      candidates.push(join(process.resourcesPath, 'image_scan_helper'))
+    } else {
+      const cwd = process.cwd()
+      candidates.push(join(cwd, 'resources', 'image_scan_helper'))
+      candidates.push(join(app.getAppPath(), 'resources', 'image_scan_helper'))
+    }
+
+    for (const path of candidates) {
+      if (existsSync(path)) return path
+    }
+
+    throw new Error('image_scan_helper not found')
+  }
+
   private getDylibPath(): string {
     const isPackaged = app.isPackaged
     const candidates: string[] = []
@@ -463,6 +483,36 @@ export class KeyServiceMac {
 
   private async _scanMemoryForAesKey(pid: number, ciphertext: Buffer): Promise<string | null> {
     const ciphertextHex = ciphertext.toString('hex')
+
+    // 优先通过 image_scan_helper 子进程调用（有 debugger entitlement）
+    try {
+      const helperPath = this.getImageScanHelperPath()
+      const result = await new Promise<string | null>((resolve, reject) => {
+        const child = spawn(helperPath, [String(pid), ciphertextHex], { stdio: ['ignore', 'pipe', 'pipe'] })
+        let stdout = ''
+        child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
+        child.stderr.on('data', (chunk: Buffer) => { console.log('[image_scan_helper]', chunk.toString().trim()) })
+        child.on('error', reject)
+        child.on('close', () => {
+          try {
+            const lines = stdout.split(/\r?\n/).map(x => x.trim()).filter(Boolean)
+            const last = lines[lines.length - 1]
+            if (!last) { resolve(null); return }
+            const payload = JSON.parse(last)
+            resolve(payload?.success && payload?.aesKey ? payload.aesKey : null)
+          } catch {
+            resolve(null)
+          }
+        })
+        setTimeout(() => { try { child.kill('SIGTERM') } catch {} }, 30_000)
+      })
+      return result
+    } catch (e: any) {
+      console.warn('[KeyServiceMac] image_scan_helper unavailable, fallback to dylib:', e?.message)
+    }
+
+    // fallback: 直接调 dylib（Electron 进程可能没有 task_for_pid 权限）
+    if (!this.initialized) await this.initialize()
     const aesKey = this.ScanMemoryForImageKey(pid, ciphertextHex)
     return aesKey || null
   }
