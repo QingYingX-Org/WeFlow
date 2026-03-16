@@ -1,0 +1,59 @@
+name: " 报告 Bug"
+description: "代码出现了非预期的问题、崩溃或报错"
+title: "[Bug]: "
+labels: ["type: bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请提供尽可能多的细节，这将帮助我们更快定位 `type: bug`。
+  - type: checkboxes
+    id: pre-check
+    attributes:
+      label: 提交前自测
+      description: 请务必确认以下事项：
+      options:
+        - label: 我已经查阅了文档，并且搜索过现有的 Issues，确认这不是一个重复问题。
+          required: true
+        - label: 我使用的是当前最新的版本。
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 请清晰、明确地描述你遇到了什么问题。
+      placeholder: 当我执行...操作时，程序崩溃了，或者输出了不正确的结果...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 提供精确的步骤，帮助我们复现该问题。如果可能，请提供最小复现代码协助我们的定位问题。
+      placeholder: |
+        1. 运行命令 '...'
+        2. 点击 '...'
+        3. 发现问题 '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: 预期行为
+      description: 你期望看到什么结果？
+      placeholder: 程序应该正常输出...而不是崩溃。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 报错日志或截图
+      description: 请提供终端报错信息、浏览器 Console 日志，或直接将截图拖入此处。
+      render: shell
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 你的操作系统、软件版本、依赖环境、系统架构等（如：Windows 11, Node v18.16.0）
+    validations:
+      required: true

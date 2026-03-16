@@ -1,0 +1,25 @@
+name: "功能与体验优化"
+description: "对现有的功能逻辑进行优化，或改进用户体验"
+title: "[Enhancement]: "
+labels: ["type: enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        持续优化是项目进步的动力！请告诉我们哪个现有功能可以做得更好。
+  - type: textarea
+    id: target
+    attributes:
+      label: 目标功能
+      description: 你希望优化的功能或模块是哪一个？
+      placeholder: 例如：当前的导出功能 / 某个页面的交互...
+    validations:
+      required: true
+  - type: textarea
+    id: improvement
+    attributes:
+      label: 优化建议
+      description: 你认为应该怎么改？这会带来什么好处（如：性能提升、减少点击次数、视觉更美观）？
+      placeholder: 我建议将...改成...，这样可以将处理速度提升一倍。
+    validations:
+      required: true

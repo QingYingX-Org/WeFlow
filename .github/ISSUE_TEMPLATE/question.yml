@@ -1,0 +1,29 @@
+name: "使用答疑"
+description: "关于如何配置、如何使用项目的求助"
+title: "[Question]: "
+labels: ["type: question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        在提问之前，请确保你已经仔细阅读过我们的官方文档。
+  - type: textarea
+    id: question
+    attributes:
+      label: 你的问题是什么？
+      description: 请清晰地描述你的疑问。
+    validations:
+      required: true
+  - type: textarea
+    id: attempts
+    attributes:
+      label: 你做过哪些尝试？
+      description: 请告诉我们你已经试过了什么方法，避免我们提供重复的建议。
+    validations:
+      required: true
+  - type: textarea
+    id: code-snippet
+    attributes:
+      label: 相关代码配置
+      description: 请粘贴你当前的配置文件或调用的代码片段。
+      render: javascript

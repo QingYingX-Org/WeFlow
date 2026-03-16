@@ -1,0 +1,24 @@
+name: " 文档反馈"
+description: "文档存在错别字、描述不清晰或缺少必要的示例"
+title: "[Docs]: "
+labels: ["type: docs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        优秀的文档和代码一样重要。感谢你帮助我们完善文档！
+  - type: input
+    id: doc-link
+    attributes:
+      label: 相关文档链接
+      description: 请提供存在问题的文档 URL 或具体文件路径。
+    validations:
+      required: true
+  - type: textarea
+    id: issue-desc
+    attributes:
+      label: 问题描述与建议
+      description: 文档哪里写错了？或者你建议补充什么内容？
+      placeholder: 在 "快速开始" 章节中，第三步的命令拼写错误，应该改为...
+    validations:
+      required: true
